@@ -1,0 +1,16 @@
+{
+  "name": "zpi-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Original ZPI and Quick Chat renderers with a browser sandbox bridge",
+  "scripts": {
+    "dev": "node scripts/runtime.mjs",
+    "build": "node scripts/runtime.mjs build",
+    "preview": "node scripts/serve.cjs",
+    "test": "node --test tests/core.test.cjs",
+    "test:browser": "node tests/browser.cjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.58.2"
+  }
+}

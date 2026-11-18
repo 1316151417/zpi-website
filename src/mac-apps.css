@@ -1,0 +1,383 @@
+@import "./traffic.css";
+.mac-app {
+  position: absolute;
+  top: 12%;
+  left: 11%;
+  width: min(922px, 96%);
+  height: min(435px, calc(100% - 84px));
+  max-width: 100%;
+  max-height: calc(100% - 68px);
+  min-width: min(300px, 100%);
+  min-height: min(200px, 60%);
+  resize: both;
+  overflow: hidden;
+  border: 1px solid #0003;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 20px 54px #15212f40;
+  z-index: 4;
+  color: #262626;
+  font:
+    13px -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    sans-serif;
+}
+.mac-app.zoom {
+  inset: 2px 1px 68px !important;
+  width: auto !important;
+  height: auto !important;
+}
+.mac-app svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.mac-app [data-titlebar] {
+  touch-action: none;
+  user-select: none;
+}
+.mac-app :disabled {
+  cursor: default;
+  opacity: 0.28;
+}
+#mac-finder {
+  display: grid;
+  grid-template-columns: clamp(106px, 21vw, 214px) minmax(0, 1fr);
+  padding: 4px 0 4px 4px;
+  background: linear-gradient(115deg, #f4f4f3f7, #fff 43%);
+}
+.finder-sidebar {
+  border-radius: 15px;
+  background: #fafaf9dd;
+  border: 1px solid #fff;
+  box-shadow: 0 4px 18px #0000000b;
+  padding: 0 6px;
+  overflow: auto;
+}
+.finder-sidebar header {
+  height: 44px;
+  display: flex;
+  align-items: flex-start;
+  padding: 13px 6px;
+}
+.finder-sidebar small {
+  display: block;
+  margin: 6px 9px;
+  font-size: 11px;
+  color: #838383;
+  font-weight: 600;
+}
+.finder-sidebar small:not(:first-of-type) {
+  margin-top: 28px;
+}
+.finder-sidebar > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.finder-sidebar > button.active {
+  background: #eee;
+  color: #007aff;
+}
+.finder-main {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: #fff;
+}
+.finder-tools {
+  height: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 0 10px;
+}
+.finder-tools strong {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 15px;
+  color: #484848;
+}
+.finder-pill {
+  display: flex;
+  align-items: center;
+  border-radius: 30px;
+  background: white;
+  box-shadow: 0 4px 18px #0000000c;
+  overflow: hidden;
+}
+.finder-pill button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: #515151;
+}
+.finder-pill button:enabled:hover,
+.finder-views [aria-pressed="true"] {
+  background: #f3f3f3;
+}
+.finder-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-content: start;
+  padding: 8px 12px;
+}
+.finder-list.as-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  grid-auto-rows: 91px;
+  gap: 5px;
+}
+.finder-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  min-width: 0;
+  border-radius: 7px;
+}
+#mac-finder[data-active] .finder-list:focus-within [aria-selected="true"] span {
+  background: #2379dc;
+  color: white;
+  border-radius: 4px;
+}
+.finder-list button span {
+  padding: 1px 3px;
+}
+#mac-textedit {
+  display: flex;
+  flex-direction: column;
+  left: 20%;
+  top: 15%;
+  width: min(660px, 96%);
+  height: min(430px, calc(100% - 80px));
+  border-radius: 14px;
+}
+#mac-textedit .mac-title {
+  border-bottom: 1px solid #ddd;
+}
+#mac-textedit textarea {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  outline: 0;
+  border: 0;
+  padding: 3px 10px;
+  background: white;
+  color: #111;
+  font:
+    13px / 1.4 Menlo,
+    Monaco,
+    monospace;
+}
+.mac-app:not([data-active]) .lights button {
+  background: #d4d4d4;
+}
+.finder-list span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.finder-list.as-icons button {
+  flex-direction: column;
+  justify-content: center;
+}
+.finder-list.as-icons svg {
+  width: 38px;
+  height: 38px;
+}
+.finder-list [data-kind="dir"] svg,
+.finder-path svg,
+.mac-title > svg {
+  fill: #7bc8ed;
+  stroke: #4aa8da;
+}
+.finder-list [data-kind="file"] svg {
+  stroke: #919ba7;
+  fill: #f4f5f7;
+}
+.finder-path,
+.finder-status {
+  border-top: 1px solid #dedede;
+  min-height: 26px;
+  color: #797979;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+}
+.finder-path {
+  padding: 0 12px;
+  overflow: auto;
+}
+.finder-path button {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 3px;
+  color: #747474;
+  white-space: nowrap;
+}
+.finder-path button + button:before {
+  content: "›";
+  color: #999;
+  margin-right: 3px;
+}
+.finder-path svg {
+  width: 13px;
+  height: 13px;
+}
+.finder-status {
+  justify-content: center;
+}
+.finder-preview {
+  position: absolute;
+  inset: 48px 0 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: white;
+  padding: 12px 15px;
+}
+.finder-preview header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.finder-preview button {
+  align-self: flex-end;
+  background: #eee;
+  padding: 5px 10px;
+  border-radius: 6px;
+}
+.finder-preview pre {
+  flex: 1;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    12px / 1.6 ui-monospace,
+    monospace;
+}
+.mac-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  flex: none;
+  background: white;
+  color: #575758;
+  padding: 0 10px;
+}
+.mac-title .lights {
+  margin-right: 9px;
+}
+.mac-title > svg {
+  width: 16px;
+  height: 16px;
+}
+.mac-title strong {
+  font-weight: 650;
+  font-size: 14px;
+}
+.mac-app#mac-terminal {
+  top: 18%;
+  left: 21%;
+  width: min(865px, 96%);
+  height: min(500px, calc(100% - 84px));
+  display: flex;
+  flex-direction: column;
+  background: #2b303e;
+  color: #e0e3e9;
+  border-radius: 16px;
+}
+.term-screen {
+  flex: 1;
+  min-height: 0;
+  padding: 7px 10px;
+  overflow: auto;
+  font:
+    11.65px / 15px Menlo,
+    Monaco,
+    ui-monospace,
+    monospace;
+}
+.term-screen [role="log"] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.term-screen form {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6ch;
+}
+.term-screen label {
+  color: #f4f4f6;
+  white-space: nowrap;
+}
+.term-screen input {
+  font: inherit;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  color: inherit;
+  background: none;
+  caret-color: #bbc1c8;
+}
+.term-matches {
+  color: #8ac7e9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.term-login {
+  display: block;
+  background: #344958;
+}
+.term-screen input:placeholder-shown {
+  background: linear-gradient(#a3a6aa, #a3a6aa) left center / 7px 14px no-repeat;
+  caret-color: transparent;
+}
+.term-screen ::selection {
+  background: #365163;
+}
+@media (max-width: 500px) {
+  .finder-tools {
+    gap: 5px;
+    padding: 0 5px;
+  }
+  .finder-tools strong {
+    font-size: 12px;
+  }
+  .finder-pill button {
+    width: 24px;
+    height: 28px;
+  }
+  .finder-sidebar > button {
+    font-size: 12px;
+    padding: 6px 4px;
+    gap: 4px;
+  }
+  .finder-path {
+    padding: 0 3px;
+  }
+}

@@ -1,0 +1,64 @@
+/* AppKit's paired diagonal wedges are one mark, not a plus sign. */
+.lights {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lights button {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  border-radius: 50%;
+  padding: 0;
+  border: 1px solid #0001;
+  box-shadow: none;
+}
+.lights button[data-win="close"] {
+  background: #ff5f57;
+}
+.lights button[data-win="min"] {
+  background: #ffbd2e;
+}
+.lights button[data-win="zoom"] {
+  background: #28c840;
+}
+.lights button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  color: #0009;
+  opacity: 0;
+  pointer-events: none;
+}
+.lights:hover button::after,
+.lights button:focus-visible::after {
+  opacity: 1;
+}
+.lights [data-win="close"]::after {
+  clip-path: polygon(
+    12% 0,
+    50% 38%,
+    88% 0,
+    100% 12%,
+    62% 50%,
+    100% 88%,
+    88% 100%,
+    50% 62%,
+    12% 100%,
+    0 88%,
+    38% 50%,
+    0 12%
+  );
+}
+.lights [data-win="min"]::after {
+  height: 1.5px;
+}
+.lights [data-win="zoom"]::after {
+  clip-path: polygon(0 0, 0 72%, 72% 0, 0 0, 100% 100%, 100% 28%, 28% 100%, 100% 100%);
+}
