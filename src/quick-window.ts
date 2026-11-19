@@ -59,6 +59,7 @@ export class QuickWindow {
   }
   place(next: Bounds, animate = false) {
     this.applied = next;
+    this.frame.toggleAttribute("data-rounded-panel", this.expanded || this.previewing);
     this.appliedInset = this.expanded ? this.expandedInset : 0;
     this.frame.style.transition =
       animate && !matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -92,7 +93,7 @@ export class QuickWindow {
     this.frame.hidden = false;
     this.frame.dispatchEvent(new Event("quick-show"));
     this.place(this.bounds());
-    this.api?.focus();
+    if (!this.embeddedPlayback) this.api?.focus();
   }
   hide() {
     this.resizing = undefined;

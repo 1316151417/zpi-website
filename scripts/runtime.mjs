@@ -64,6 +64,7 @@ const quickHtml = Object.fromEntries(sources)
   ["quick/index.html"].toString("utf8")
   .replace(/<meta http-equiv="Content-Security-Policy"[^>]+>/, "")
   .replace("<title>Quick Chat</title>", "<title>ZPI Quick Chat</title>")
+  .replace(/(<textarea\b[^>]*?) autofocus\b/, "$1")
   .replace('<link rel="stylesheet" href="./style.css">', "")
   .replace('src="./renderer.js"', 'src="/src/quick-entry.ts"');
 await Promise.all([
@@ -98,6 +99,33 @@ const config = {
   configFile: false,
   root,
   base: "./",
+  css: {
+    postcss: {
+      plugins: [
+        {
+          postcssPlugin: "quick-chat-site-theme",
+          AtRule: {
+            media(rule) {
+              if (
+                rule.source?.input.file !== resolve(quick, "src/style.css") ||
+                rule.params !== "(prefers-color-scheme: dark)"
+              )
+                return;
+              // Keep Quick Chat's own dark palette; the browser host supplies the theme instead of Electron's OS setting.
+              rule.walkRules((child) => {
+                child.selectors = child.selectors.map((s) =>
+                  s.startsWith(":root")
+                    ? `:root[data-site-theme="dark"]${s.slice(5)}`
+                    : `:root[data-site-theme="dark"] ${s}`,
+                );
+              });
+              rule.replaceWith(...rule.nodes);
+            },
+          },
+        },
+      ],
+    },
+  },
   plugins: [
     tailwind(),
     {

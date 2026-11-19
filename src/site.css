@@ -1,3 +1,4 @@
+@import "./site-theme.css";
 * {
   box-sizing: border-box;
 }
@@ -85,14 +86,27 @@ a:focus-visible {
   position: absolute;
   left: 0;
   top: 0;
-  min-width: 740px;
-  min-height: 560px;
   border-radius: 16px;
   overflow: hidden;
-  border: 1px solid #ffffffbb;
-  background: #f0f0f0;
   box-shadow: 0 18px 50px #0005;
   z-index: 2;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .zpi-native-window:not([hidden]),
+  .quick-native-window:not([hidden]),
+  .info-window:not([hidden]) {
+    animation: open-app 220ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  }
+  @keyframes open-app {
+    from {
+      opacity: 0;
+      translate: 0 12px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
 }
 .zpi-native-window iframe {
   display: block;
@@ -101,11 +115,35 @@ a:focus-visible {
   border: 0;
 }
 .quick-native-window {
+  --quick-radius: 22px;
+  /* Mask the iframe canvas without clipping pointer targets in the original corner resize handles. */
+  --diameter: calc(2 * var(--quick-radius));
+  --disc: radial-gradient(closest-side, #000 calc(100% - 0.6px), transparent);
+  mask-image:
+    linear-gradient(#000 0 0), linear-gradient(#000 0 0), var(--disc), var(--disc), var(--disc), var(--disc);
+  mask-position:
+    center,
+    center,
+    top left,
+    top right,
+    bottom left,
+    bottom right;
+  mask-size:
+    calc(100% - var(--diameter)) 100%,
+    100% calc(100% - var(--diameter)),
+    var(--diameter) var(--diameter),
+    var(--diameter) var(--diameter),
+    var(--diameter) var(--diameter),
+    var(--diameter) var(--diameter);
+  mask-repeat: no-repeat;
   position: absolute;
   border: 0;
   background: transparent;
   z-index: 50;
   overflow: visible;
+}
+.quick-native-window[data-rounded-panel] {
+  --quick-radius: 16px;
 }
 #zpi-resize {
   position: absolute;
@@ -242,9 +280,10 @@ a:focus-visible {
   max-height: calc(100% - 88px);
   display: flex;
   flex-direction: column;
-  border: 1px solid #ccc9;
+  color: light-dark(#262626, #e8e8e8);
+  border: 1px solid light-dark(#ccc9, #606063);
   border-radius: 12px;
-  background: #f8f8f8;
+  background: light-dark(#f8f8f8, #232324);
   box-shadow: 0 18px 60px #0004;
   overflow: hidden;
   z-index: 30;
@@ -254,9 +293,9 @@ a:focus-visible {
   display: flex;
   align-items: center;
   gap: 15px;
-  background: #eee;
+  background: light-dark(#eee, #303031);
   padding: 0 16px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid light-dark(#ddd, #49494b);
   font-size: 13px;
 }
 .info-window.zoom {
@@ -279,26 +318,14 @@ a:focus-visible {
   line-height: 1.8;
   font-size: 13px;
 }
-#info-content h2 {
-  font-size: 23px;
-  font-weight: 550;
-  margin: 0 0 14px;
-}
-#info-content h3 {
-  font-size: 14px;
-  margin-top: 24px;
-}
-#info-content p {
-  color: #666;
-}
 #info-content pre {
   font:
     12px / 1.9 ui-monospace,
     monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  background: #ececec;
-  border: 1px solid #ddd;
+  background: light-dark(#ececec, #19191a);
+  border: 1px solid light-dark(#ddd, #454548);
   padding: 15px;
   border-radius: 7px;
 }
@@ -313,9 +340,9 @@ a:focus-visible {
   font-size: 12px;
 }
 .info-button.primary {
-  background: #222;
-  color: white;
-  border-color: #222;
+  background: light-dark(#222, #f2f2f2);
+  color: light-dark(white, #202022);
+  border-color: transparent;
 }
 #notice {
   position: absolute;
@@ -333,33 +360,14 @@ a:focus-visible {
   box-shadow: 0 4px 15px #0002;
   pointer-events: none;
 }
-.sdk-heading {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-}
-.sdk-heading img {
-  width: 58px;
-  height: 58px;
-}
-.sdk-heading small {
-  color: #74787e;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-}
-#info-content .sdk-heading h2 {
-  margin: 0;
-}
 #sdk-form {
   display: flex;
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
 }
-#sdk-name {
-  padding: 7px 10px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
+#sdk-code {
+  margin-top: 0;
 }
 #info-content #sdk-output {
   background: #22262b;
@@ -427,9 +435,6 @@ a:focus-visible {
   .dock {
     height: 57px;
   }
-  .zpi-native-window {
-    transform-origin: top left;
-  }
   #info-content {
     padding: 19px;
   }
@@ -445,7 +450,7 @@ a:focus-visible {
     padding: 12px 16px;
   }
   #info-content #sdk-code {
-    max-height: clamp(5em, calc(100dvh - 420px), 18em);
+    max-height: max(5em, calc(100dvh - 320px));
     overflow: auto;
   }
   #sdk-output {

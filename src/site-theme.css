@@ -1,0 +1,25 @@
+:root[data-site-theme="light"] {
+  color-scheme: light;
+}
+:root[data-site-theme="dark"] {
+  color-scheme: dark;
+}
+button[data-theme-switch] {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+button[data-theme-switch]:hover {
+  background: color-mix(in srgb, currentColor 9%, transparent);
+}
+button[data-theme-switch][hidden] {
+  display: none;
+}

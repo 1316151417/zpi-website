@@ -3,7 +3,7 @@ import { core, files, DESKTOP, type FileChange } from "./shared";
 import { QuickWindow } from "./quick-window";
 import { zpiGeometry } from "./zpi-window";
 import { desktopApps } from "./mac-apps";
-import sdkIcon from "./agent-sdk.svg";
+import "./site-theme";
 import { requestedApp, sequence, waitUntil, delay, type DemoApp } from "./playback";
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -17,9 +17,25 @@ const quickWindow = new QuickWindow(quickFrame, desktop),
 const app = () => (zpiFrame.contentWindow as any)?.zpiDemo;
 const url = new URL(location.href),
   initial = requestedApp(url),
-  tour = new AbortController(),
-  readyApps = new Set<string>();
+  tour = new AbortController();
+const rendererFrames = { zpi: zpiFrame, quick: quickFrame };
+type Renderer = keyof typeof rendererFrames;
+const readyApps = new Set<Renderer>();
+let pendingOpen: { product: Renderer; open: () => void } | undefined;
+function loadRenderer(product: Renderer) {
+  const frame = rendererFrames[product];
+  if (!frame.hasAttribute("src")) frame.src = `./${product}.html`;
+}
+function whenReady(product: Renderer, open: () => void) {
+  pendingOpen = undefined;
+  if (readyApps.has(product)) open();
+  else {
+    pendingOpen = { product, open };
+    loadRenderer(product);
+  }
+}
 const interrupt = () => {
+  pendingOpen = undefined;
   quickWindow.embeddedPlayback = false;
   tour.abort();
 };
@@ -60,11 +76,6 @@ function showZpi() {
   front(zpiWindow);
   if (!quickWindow.pinned) quickWindow.hide();
 }
-async function openFile(path: string) {
-  showZpi();
-  await app()?.ready;
-  await app()?.openFile(path);
-}
 function renderDesktop() {
   $("#desktop-files").replaceChildren(
     ...files.list(DESKTOP).map((f: any) => {
@@ -90,7 +101,7 @@ function sdk() {
   if ($("#sdk-form")) return;
   $("#info-title").textContent = "ZPI Agent SDK";
   $("#info-content").innerHTML =
-    `<div class="sdk-heading"><img src="${sdkIcon}" alt=""><div><small>ZPI AGENT SDK · 示例 01</small><h2>Hello, agent.</h2></div></div><p>运行一次问候。响应为本地模拟，不需要模型凭据。</p><pre id="sdk-code"></pre><form id="sdk-form"><button class="info-button primary">运行示例</button></form><pre id="sdk-output" role="status">等待运行</pre>`;
+    `<pre id="sdk-code" aria-label="TypeScript"></pre><form id="sdk-form"><button class="info-button primary">运行</button></form><pre id="sdk-output" role="status">等待运行</pre>`;
   $("#sdk-code").textContent =
     `import { query } from '@zpi-dev/agent-sdk';\n\nfor await (const event of query({\n  prompt: '只回复：${greeting}',\n  options: { persistSession: false },\n})) {\n  if (event.type === 'result' && event.subtype === 'success')\n    console.log(event.result);\n}`;
   const output = $("#sdk-output");
@@ -101,7 +112,10 @@ function sdk() {
     sdkTimer = setTimeout(() => {
       output.textContent = greeting;
       const content = $("#info-content");
-      if (!infoWindow.hidden && output.getBoundingClientRect().bottom > content.getBoundingClientRect().bottom)
+      if (
+        !infoWindow.hidden &&
+        output.getBoundingClientRect().bottom > content.getBoundingClientRect().bottom
+      )
         content.scrollTop = content.scrollHeight;
     }, 1000);
   };
@@ -112,29 +126,33 @@ function shortcut(event: KeyboardEvent) {
   if (event.code === "Space") {
     event.preventDefault();
     event.stopPropagation();
-    if (event.shiftKey) {
-      quickWindow.api?.reset();
-      quickWindow.show();
-    } else {
-      if (!quickWindow.visible) focusBeforeQuick = document.activeElement;
-      quickWindow.toggle();
-      if (!quickWindow.visible) (focusBeforeQuick as HTMLElement)?.focus?.();
-    }
+    whenReady("quick", () => {
+      if (event.shiftKey) quickWindow.api.reset();
+      else {
+        if (!quickWindow.visible) focusBeforeQuick = document.activeElement;
+        quickWindow.toggle();
+        if (!quickWindow.visible) (focusBeforeQuick as HTMLElement)?.focus?.();
+      }
+    });
   } else if (event.shiftKey && ["KeyC", "KeyV", "KeyA"].includes(event.code)) {
     event.preventDefault();
     event.stopPropagation();
-    quickWindow.show();
-    if (event.code === "KeyC") {
-      const text = window.getSelection()?.toString() || zpiFrame.contentWindow?.getSelection()?.toString();
-      quickWindow.api?.draft(text ? { text } : { error: "网页只能带入本页选中文字。" });
-    } else if (event.code === "KeyV") {
-      if (!navigator.clipboard?.readText) quickWindow.api?.draft({ error: "请在输入框粘贴。" });
-      else
-        navigator.clipboard.readText().then(
-          (text) => quickWindow.api?.draft({ text }),
-          () => quickWindow.api?.draft({ error: "请使用粘贴。" }),
-        );
-    } else quickWindow.api?.draft({ error: "浏览器不能调用 macOS 框选截图；可以粘贴图片。" });
+    const text = window.getSelection()?.toString() || zpiFrame.contentWindow?.getSelection()?.toString();
+    const draft =
+      event.code === "KeyC"
+        ? text
+          ? { text }
+          : { error: "网页只能带入本页选中文字。" }
+        : event.code === "KeyV"
+          ? (navigator.clipboard?.readText?.().then(
+              (text) => ({ text }),
+              () => ({ error: "请使用粘贴。" }),
+            ) ?? { error: "请在输入框粘贴。" })
+          : { error: "浏览器不能调用 macOS 框选截图；可以粘贴图片。" };
+    whenReady("quick", () => {
+      quickWindow.show();
+      void Promise.resolve(draft).then((value) => quickWindow.api.draft(value));
+    });
   }
 }
 (window as any).zpiSite = {
@@ -143,10 +161,13 @@ function shortcut(event: KeyboardEvent) {
   showFiles: mac.showFinder,
   shortcut,
   interrupt,
-  ready: (product: string) => {
+  ready: (product: Renderer) => {
     readyApps.add(product);
-    if (product === "zpi" && url.searchParams.get("open") === "snake.html")
-      void openFile(DESKTOP + "/snake.html");
+    if (pendingOpen?.product === product) {
+      const { open } = pendingOpen;
+      pendingOpen = undefined;
+      open();
+    }
   },
   isZpiFrontmost: () => frontmost() === zpiWindow,
   hideZpi: () => (zpiWindow.hidden = true),
@@ -160,9 +181,6 @@ function shortcut(event: KeyboardEvent) {
     }
   },
 };
-zpiWindow.hidden = initial === "zpi-quick-chat" || initial === "zpi-agent-sdk";
-zpiFrame.src = "./zpi.html";
-quickFrame.src = "./quick.html";
 window.addEventListener(
   "keydown",
   (e) => {
@@ -176,6 +194,7 @@ infoWindow.querySelector("header")!.ondblclick = (e) => {
   if (!(e.target as Element).closest("button")) infoWindow.classList.toggle("zoom");
 };
 document.addEventListener("pointerdown", (e) => {
+  if ((e.target as Element).closest("[data-theme-switch]")) return;
   if (e.isTrusted) interrupt();
   if (!(e.target as Element).closest("[data-open=quick]")) quickWindow.blur();
 });
@@ -197,11 +216,11 @@ document.addEventListener("click", (e) => {
   const el = (e.target as Element).closest<HTMLElement>("button");
   if (!el) return;
   if (el.dataset.open === "zpi") {
-    showZpi();
+    whenReady("zpi", showZpi);
     rememberRoute("zpi");
   }
   if (el.dataset.open === "quick") {
-    quickWindow.toggle();
+    whenReady("quick", () => quickWindow.toggle());
     rememberRoute("zpi-quick-chat");
   }
   if (el.dataset.open === "sdk") {
@@ -244,9 +263,9 @@ clock();
 setInterval(clock, 30000);
 window.addEventListener("hashchange", () => {
   interrupt();
-  if (location.hash === "#quick-chat") quickWindow.show();
+  if (location.hash === "#quick-chat") whenReady("quick", () => quickWindow.show());
   else if (location.hash === "#agent-sdk") sdk();
-  else showZpi();
+  else whenReady("zpi", showZpi);
 });
 async function launch() {
   const signal = tour.signal,
@@ -255,16 +274,21 @@ async function launch() {
       (url.searchParams.get("autoplay") !== "0" && (initial === "zpi" || initial === "all"));
   const products = initial === "all" ? sequence : [initial];
   for (const [index, product] of products.entries()) {
-    if (index > 0) await delay(3000, signal);
+    if (product === "zpi") loadRenderer("zpi");
+    if (product === "zpi-quick-chat") loadRenderer("quick");
+    await delay(index === 0 ? 1000 : 3000, signal);
     signal.throwIfAborted();
     if (product === "zpi") {
-      showZpi();
       await waitUntil(() => readyApps.has("zpi"), signal);
+      signal.throwIfAborted();
+      showZpi();
+      if (url.searchParams.get("open") === "snake.html") await app().openFile(DESKTOP + "/snake.html");
       if (autoplay) await app().play(signal);
     } else if (product === "zpi-quick-chat") {
       await waitUntil(() => readyApps.has("quick"), signal);
+      signal.throwIfAborted();
       // A sibling demo can take browser focus; keep an unattended embedded tour visible until takeover.
-      quickWindow.embeddedPlayback = autoplay && window.self !== window.top;
+      quickWindow.embeddedPlayback = window.self !== window.top;
       quickWindow.show();
       if (autoplay) await quickWindow.api.play(signal);
     } else {

@@ -1,6 +1,14 @@
 @import "./traffic.css";
+/* Paint the backing behind the translucent Mac panels in the renderer's own theme. */
+:root[data-theme] {
+  background-color: var(--color-window-bg);
+}
+:root[data-theme] #root {
+  border: 1px solid light-dark(#ffffffbb, transparent);
+  border-radius: 16px;
+}
 .demo-read-only .composer-container::before {
-  content: "复杂任务 · 只读示例";
+  content: "只读";
   display: block;
   margin: 4px auto;
   text-align: center;
@@ -17,4 +25,58 @@
   left: 22px;
   top: 23px;
   pointer-events: auto;
+}
+
+/* Keep the task list in the original flex layout, including in an embedded window. */
+@media (max-width: 820px) {
+  .workspace-surface {
+    --sidebar-content-width: min(var(--left-sidebar-width), clamp(128px, 30vw, 232px));
+  }
+  .workspace-surface > .sidebar {
+    width: var(--sidebar-content-width);
+    transition: none;
+  }
+  .workspace-surface > .sidebar-drag-space {
+    width: max(0px, calc(var(--sidebar-content-width) - 132px));
+  }
+  .shell:not(.pane-full-view) .workspace-surface .composer-container {
+    --conversation-column-width: 100%;
+    --conversation-scrollbar-width: 0px;
+  }
+  .workspace-surface > .sidebar-resizer,
+  .right-pane > .right-resizer {
+    display: none;
+  }
+}
+
+/* Electron overlays the right pane below 1100px. Reserve its width in the embedded workspace instead. */
+@media (max-width: 1099px) {
+  .shell:not(.pane-full-view) .workspace-surface > .right-pane {
+    position: relative;
+    inset: auto;
+    max-width: none;
+    box-shadow: none;
+  }
+  .shell.pane-open:not(.pane-full-view) .workspace-surface .topbar {
+    margin-right: 0;
+    padding-left: 20px;
+    gap: 12px;
+  }
+  .shell.mac-desktop.left-collapsed.pane-open:not(.pane-full-view) .workspace-surface .topbar {
+    padding-left: 164px;
+  }
+}
+@media (max-width: 660px) {
+  .shell.pane-open:not(.pane-full-view) .workspace-surface > .main {
+    display: none;
+  }
+  .shell.pane-open:not(.pane-full-view) .workspace-surface > .right-pane:not([hidden]) {
+    width: auto;
+    flex: 1;
+    margin: 48px 4px 4px;
+  }
+  .shell.pane-open:not(.pane-full-view) .right-pane .right-pane-content {
+    width: 100%;
+    max-width: none;
+  }
 }

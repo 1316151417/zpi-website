@@ -1,6 +1,8 @@
 import type { Bridge, Snapshot, ToolCall } from "@source/quick/types.ts";
 import { validateImages, inputLimits } from "@source/quick/input.ts";
 import "@source/quick/style.css";
+import "./site-theme";
+import "./site-theme.css";
 import { clone, core, id, clipboard, site, onTrustedInput } from "./shared";
 import type { QuickWindow } from "./quick-window";
 import { scenario } from "./quick-scenarios";
@@ -178,23 +180,28 @@ window.quickChat = {
   publishLayout: sendSnapshot,
   async play(signal: AbortSignal) {
     const input = document.querySelector<HTMLTextAreaElement>("#input")!;
-    input.focus();
+    const passive = controller()?.embeddedPlayback;
+    if (!passive) input.focus({ preventScroll: true });
     await delay(750, signal);
     for (const char of scenario(state.tools).prompt) {
       input.value += char;
-      input.setSelectionRange(input.value.length, input.value.length);
+      if (!passive) input.setSelectionRange(input.value.length, input.value.length);
       input.dispatchEvent(new Event("input", { bubbles: true }));
       await delay(45, signal);
     }
     await delay(400, signal);
-    document.querySelector<HTMLFormElement>("#composer")!.requestSubmit();
+    if (passive) {
+      // The desktop form refocuses its textarea after a send. An unattended embed must not focus its host.
+      start({ generation: state.generation, text: input.value, images: [] });
+      input.value = "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    } else document.querySelector<HTMLFormElement>("#composer")!.requestSubmit();
     await waitUntil(() => state.messages.at(-1)?.status === "completed", signal);
   },
   reset,
   draft: (value) => draftListeners.forEach((listener) => listener(value)),
   focus: () => {
-    window.focus();
-    document.querySelector<HTMLTextAreaElement>("#input")?.focus();
+    document.querySelector<HTMLTextAreaElement>("#input")?.focus({ preventScroll: true });
   },
 };
 await import("@source/quick/renderer.ts");

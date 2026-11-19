@@ -33,17 +33,35 @@ export function desktopApps(
     win.setAttribute("aria-label", name);
     win.innerHTML = html;
     desktop.append(win);
+    let dragged: { x: number; y: number } | undefined;
+    function fit() {
+      if (win.hidden || win.classList.contains("zoom")) return;
+      const maxX = Math.max(0, desktop.clientWidth - win.offsetWidth);
+      const maxY = Math.max(0, desktop.clientHeight - 68 - win.offsetHeight);
+      win.style.left = `${dragged ? Math.max(0, Math.min(dragged.x, maxX)) : maxX / 2}px`;
+      win.style.top = `${dragged ? Math.max(0, Math.min(dragged.y, maxY)) : maxY / 2}px`;
+    }
+    function toggleZoom() {
+      win.classList.toggle("zoom");
+      fit();
+    }
     win.addEventListener("pointerdown", () => front(win), true);
     win.querySelectorAll<HTMLButtonElement>("[data-win]").forEach(
       (button) =>
         (button.onclick = () => {
-          if (button.dataset.win === "zoom") win.classList.toggle("zoom");
-          else win.hidden = true;
+          if (button.dataset.win === "zoom") toggleZoom();
+          else {
+            win.hidden = true;
+            if (button.dataset.win === "close") {
+              dragged = undefined;
+              win.classList.remove("zoom");
+            }
+          }
         }),
     );
     for (const header of win.querySelectorAll<HTMLElement>("[data-titlebar]")) {
       header.ondblclick = (e) => {
-        if (!(e.target as Element).closest(interactive)) win.classList.toggle("zoom");
+        if (!(e.target as Element).closest(interactive)) toggleZoom();
       };
       header.onpointerdown = (e) => {
         if (e.button !== 0 || (e.target as Element).closest(interactive) || win.classList.contains("zoom"))
@@ -54,22 +72,13 @@ export function desktopApps(
           sy = e.clientY;
         header.setPointerCapture(e.pointerId);
         header.onpointermove = (p) => {
-          const maxX = desktop.clientWidth - win.offsetWidth;
-          const maxY = desktop.clientHeight - 100;
-          win.style.left = Math.max(0, Math.min(maxX, x + p.clientX - sx)) + "px";
-          win.style.top = Math.max(0, Math.min(maxY, y + p.clientY - sy)) + "px";
+          dragged = { x: x + p.clientX - sx, y: y + p.clientY - sy };
+          fit();
         };
         header.onlostpointercapture = () => (header.onpointermove = null);
       };
     }
-    const fit = () => {
-      if (!win.hidden && !win.classList.contains("zoom")) {
-        win.style.left = Math.max(0, Math.min(win.offsetLeft, desktop.clientWidth - win.offsetWidth)) + "px";
-        win.style.top =
-          Math.max(0, Math.min(win.offsetTop, desktop.clientHeight - 68 - win.offsetHeight)) + "px";
-      }
-    };
-    window.addEventListener("resize", fit);
+    new ResizeObserver(fit).observe(desktop);
     return {
       win,
       show: () => {

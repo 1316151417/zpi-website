@@ -23,6 +23,7 @@ import { defaultMemorySettings } from "@source/plugins/memory/types.ts";
 import { defaultPluginSettings } from "@source/plugins/index.ts";
 import { emptySession, reduceSession } from "@source/ui/reducer.ts";
 import toolDefinitions from "virtual:demo-tools";
+import { currentTheme } from "./site-theme";
 import { desktopPluginIds as plugins } from "@source/plugins/index.ts";
 import { COMPLEX, CHILD, complexView, exampleLog } from "./complex-task";
 import {
@@ -51,7 +52,7 @@ const on = (name: string, callback: (...args: any[]) => void) => {
 const emit = (name: string, value?: any) =>
   callbacks.get(name)?.forEach((callback) => callback(clone(value)));
 const settings: PublicSettings = {
-  interface: { ...clone(defaultPreferences), showContextUsage: true },
+  interface: { ...clone(defaultPreferences), theme: currentTheme(), showContextUsage: true },
   shortcuts: defaultShortcuts("darwin"),
   autoArchive: clone(defaultAutoArchiveSettings),
   plugins: clone(defaultPluginSettings),
@@ -199,6 +200,10 @@ function updateSettings() {
   emit("onSettings", settings);
   return settings;
 }
+window.addEventListener("zpi-theme-change", () => {
+  settings.interface.theme = currentTheme();
+  updateSettings();
+});
 function workspace(sid?: string) {
   const session = sid ? sessions.find((s) => s.id === sid) : null;
   const project = projects.find((p) => p.id === session?.projectId) ?? projects[0];
@@ -311,7 +316,7 @@ async function start(input: any) {
   const runner = new core.DemoRunner((step: any) => {
     if (step.type === "plan") {
       text(sid, runId, "我会先查看桌面，再写入独立的 HTML 游戏并打开预览。");
-      finishThinking = thinking(sid, runId, "演示计划：检查目标目录，写入单文件游戏，最后验证产物。");
+      finishThinking = thinking(sid, runId, "检查目标目录，写入单文件游戏，最后验证产物。");
     }
     if (step.type === "inspect") {
       finishThinking?.();
@@ -344,15 +349,10 @@ async function start(input: any) {
         runId,
         "bash",
         { command: "ls -lh ~/Desktop/snake.html", description: "确认游戏文件已生成" },
-        "snake.html · 预设演示工具结果",
+        `snake.html  ${(new TextEncoder().encode(snake).byteLength / 1024).toFixed(1)} KiB`,
       );
     if (step.type === "complete") {
-      text(
-        sid,
-        runId,
-        `已完成：[打开贪吃蛇游戏](${snakePath})。\n使用方向键或 WASD 移动，空格暂停，也可以使用页面上的方向按钮。`,
-        true,
-      );
+      text(sid, runId, `已完成：[打开贪吃蛇游戏](${snakePath})。`, true);
       session.running = false;
       session.status = "completed";
       event(sid, runId, { type: "settled", status: "completed", endedAt: Date.now() });
@@ -416,7 +416,7 @@ function browserRender(browser: Browser, force = false) {
     delete browser.renderedContent;
     const message = url.startsWith("file:")
       ? "此虚拟文件不存在或已被清理。重新生成后即可继续预览。"
-      : "演示浏览器仅预览虚拟文件。外部网站请使用工具栏的“在外部浏览器打开”。";
+      : "无法预览此地址。可在外部浏览器中打开。";
     frame.srcdoc = `<body style="font:14px system-ui;padding:24px;color:#777">${message}</body>`;
   }
 }
@@ -444,6 +444,7 @@ export function installWebviewAdapter() {
     return element;
   }) as typeof document.createElement;
 }
+const memoryNote = "交付文件放在桌面。";
 const memoryStatus = () => ({
   shortFiles: [
     {
@@ -451,7 +452,7 @@ const memoryStatus = () => ({
       path: core.HOME + "/.zpi/MEMORY.md",
       exists: true,
       count: 1,
-      characters: 14,
+      characters: memoryNote.length,
       diagnostics: [],
     },
   ],
@@ -459,7 +460,7 @@ const memoryStatus = () => ({
     path: core.HOME + "/.zpi/memory",
     running: false,
     status: "disabled",
-    message: "网页演示不调用模型生成记忆。",
+    message: "长期记忆已停用。",
     tokens: 0,
     cost: null,
     sources: [],
@@ -755,7 +756,7 @@ const methods: Record<string, (...args: any[]) => any> = {
         emit("onPaneEvent", {
           type: "terminal",
           id: key,
-          data: "\x1b[90mZPI 网页沙箱 · 不执行本机命令\x1b[0m\r\nDesktop % ",
+          data: "Desktop % ",
         }),
       300,
     );
@@ -833,7 +834,7 @@ const methods: Record<string, (...args: any[]) => any> = {
     ...workspace(),
     basePrompt: "你是 ZPI，帮助用户完成工作。",
     customInstructions: "",
-    prompt: "网页演示使用预设任务，不调用模型。",
+    prompt: "你是 ZPI，帮助用户完成工作。简明回答，清楚列出涉及的文件。",
   }),
   listTools: () => toolDefinitions.map((tool: any) => ({ ...tool, enabled: toolAvailable(tool.name) })),
   getSkillSettings: () => ({ skills: [], diagnostics: [], directories: [core.HOME + "/.agents/skills"] }),
@@ -918,7 +919,7 @@ const methods: Record<string, (...args: any[]) => any> = {
   checkMemoryNow: memoryStatus,
   openMemoryFile: () => ({
     path: core.HOME + "/.zpi/MEMORY.md",
-    content: "# Memory\n\n网页中的记忆示例。",
+    content: `# Memory\n\n${memoryNote}`,
     exists: true,
   }),
   saveProvider: (input) => {

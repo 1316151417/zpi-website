@@ -27,10 +27,83 @@ async function pageAt(query = "?autoplay=0") {
     if (/^https?:/.test(request.url()) && !request.url().startsWith(base)) network.push(request.url());
   });
   await page.goto(base + "/demo.html" + query);
-  await page.waitForFunction(() => Boolean(document.querySelector("#zpi-frame").contentWindow.zpiDemo));
-  await page.evaluate(() => document.querySelector("#zpi-frame").contentWindow.zpiDemo.ready);
-  await page.waitForTimeout(300);
+  const product = new URLSearchParams(query).get("app");
+  const firstWindow =
+    product === "zpi-quick-chat"
+      ? "#quick-frame"
+      : product === "zpi-agent-sdk"
+        ? "#info-window"
+        : "#zpi-native-window";
+  await page.locator(firstWindow).waitFor();
   return { page, context, z: page.frameLocator("#zpi-frame"), q: page.frameLocator("#quick-frame") };
+}
+async function checkUtilityGeometry(root, id, compareToZpi = false) {
+  const [desktop, win, dock, zpi] = await Promise.all(
+    ["#desktop", "#mac-" + id, ".dock", "#zpi-native-window"].map((selector) =>
+      root.locator(selector).boundingBox(),
+    ),
+  );
+  const dx = win.x + win.width / 2 - (desktop.x + desktop.width / 2);
+  const dy = win.y + win.height / 2 - (desktop.y + (desktop.height - 68) / 2);
+  assert.ok(Math.abs(dx) <= 1 && Math.abs(dy) <= 1, `${id} center offset ${dx}, ${dy}`);
+  assert.ok(
+    win.y + win.height <= dock.y && win.x >= desktop.x && win.x + win.width <= desktop.x + desktop.width,
+  );
+  if (compareToZpi) {
+    const ratio = win.width / zpi.width;
+    assert.ok(
+      ratio >= (id === "finder" ? 0.55 : 0.49) && ratio <= 0.96 && win.height < zpi.height * 0.85,
+      `${id} relative size: ${ratio}`,
+    );
+  }
+  return win;
+}
+async function assertDockedSidebar(z) {
+  const sidebar = z.locator(".workspace-surface > .sidebar");
+  await sidebar.waitFor();
+  assert.equal(await z.getByTestId("left-sidebar-toggle").getAttribute("aria-expanded"), "true");
+  const side = await sidebar.boundingBox();
+  for (const selector of [".main", ".right-pane"]) {
+    const panel = await z.locator(".workspace-surface > " + selector).boundingBox();
+    if (panel) assert.ok(side.x + side.width <= panel.x + 1, `left sidebar overlaps ${selector}`);
+  }
+}
+async function assertDarkZpiRim(page, frame) {
+  const { x, y, width } = await frame.boundingBox();
+  const strip = await page.screenshot({
+    clip: { x: Math.floor(x + width / 2), y: Math.ceil(y), width: 1, height: 4 },
+  });
+  const brightest = await page.evaluate(
+    async (bytes) => {
+      const image = await createImageBitmap(new Blob([Uint8Array.from(bytes)], { type: "image/png" }));
+      const ctx = document.createElement("canvas").getContext("2d");
+      ctx.drawImage(image, 0, 0);
+      image.close();
+      return Math.max(...ctx.getImageData(0, 0, 1, 4).data.filter((_, i) => i % 4 !== 3));
+    },
+    [...strip],
+  );
+  assert.ok(brightest < 90, `unexpected light pixels at top of dark ZPI window: ${brightest}`);
+}
+async function assertTransparentQuickCorners(page) {
+  const frame = page.locator("#quick-frame");
+  await frame.evaluate((node) => Promise.all(node.getAnimations().map((a) => a.finished)));
+  const { x, y, width, height } = await frame.boundingBox();
+  const sample = () =>
+    Promise.all(
+      [Math.ceil(x) + 1, Math.floor(x + width) - 3].flatMap((left) =>
+        [Math.ceil(y) + 1, Math.floor(y + height) - 3].map((top) =>
+          page.screenshot({ clip: { x: left, y: top, width: 2, height: 2 } }),
+        ),
+      ),
+    );
+  const visible = await sample();
+  const style = await page.addStyleTag({ content: "#quick-frame { opacity: 0 !important; }" });
+  try {
+    assert.deepEqual(visible, await sample(), "Each rounded corner must show the desktop behind the iframe");
+  } finally {
+    await style.evaluate((node) => node.remove());
+  }
 }
 async function complete(page) {
   await page.waitForFunction(
@@ -98,13 +171,57 @@ async function quickBounds(page) {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
       permissions: ["clipboard-read", "clipboard-write"],
+      colorScheme: "dark",
     });
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(base);
+    assert.ok(
+      (await page.locator("#install").boundingBox()).x < (await page.locator("#live").boundingBox()).x,
+    );
+    assert.equal(await page.locator("#headline").textContent(), "极简的界面，收敛的功能。");
     assert.equal(await page.locator(".products [aria-current=page]").textContent(), "ZPI");
     await page.frameLocator("#live").locator('[data-file$="/snake.html"]').waitFor({ timeout: 25000 });
+    const startButton = page
+      .frameLocator("#live")
+      .frameLocator("#zpi-frame")
+      .frameLocator(".browser-webview iframe")
+      .locator("#start");
+    await startButton.waitFor();
+    assert.ok(
+      await startButton.evaluate((button) => {
+        const r = button.getBoundingClientRect(),
+          board = button.closest(".board").getBoundingClientRect();
+        return r.top >= board.top && r.bottom <= board.bottom;
+      }),
+    );
     await page.screenshot({ path: path.join(artifacts, "intro-desktop.png") });
+    const homeDocument = await page.evaluateHandle(() => document);
+    const desktop = page.frameLocator("#live");
+    const themeSwitch = page.getByRole("button", { name: "深色模式" });
+    const app = desktop.frameLocator("#zpi-frame");
+    assert.equal(await page.locator("html").getAttribute("data-site-theme"), "light");
+    await app.locator("html[data-theme=light]").waitFor();
+    await themeSwitch.click();
+    await app.locator("html[data-theme=dark]").waitFor();
+    await assertDarkZpiRim(page, desktop.locator("#zpi-native-window"));
+    await assertDockedSidebar(app);
+    assert.equal(await desktop.locator('[data-file$="/snake.html"]').count(), 1);
+    assert.match(await page.locator("#standalone").getAttribute("href"), /theme=dark/);
+    for (const [action, id] of [
+      ["files", "finder"],
+      ["terminal", "terminal"],
+    ]) {
+      await desktop.locator(`.dock [data-action=${action}]`).click();
+      await checkUtilityGeometry(desktop, id, true);
+      await page.screenshot({ path: path.join(artifacts, `intro-${id}.png`) });
+      await desktop.locator(`#mac-${id} [data-win=close]`).click();
+    }
+    await page.setViewportSize({ width: 375, height: 812 });
+    await desktop.locator(".dock [data-action=files]").click();
+    await checkUtilityGeometry(desktop, "finder");
+    await desktop.locator("#mac-finder [data-win=close]").click();
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.locator(".products").getByRole("link", { name: "ZPI Quick Chat", exact: true }).click();
     await page
       .frameLocator("#live")
@@ -112,9 +229,25 @@ async function quickBounds(page) {
       .getByText(/小工具也能带来大改变/)
       .last()
       .waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.product), "zpi-quick-chat");
     assert.equal(await page.locator("#command").textContent(), "npx @zpi-dev/quick-chat");
+    assert.equal(await page.locator("#headline").textContent(), "叫出来问。用完收起。");
+    assert.equal(await desktop.locator("#zpi-frame").getAttribute("src"), null);
+    const quick = desktop.frameLocator("#quick-frame");
+    const inputColor = () => quick.locator("#composer").evaluate((n) => getComputedStyle(n).backgroundColor);
+    assert.equal(await inputColor(), "rgb(43, 43, 43)");
+    await themeSwitch.click();
+    assert.equal(await inputColor(), "rgb(255, 255, 255)");
+    assert.ok(
+      await quick
+        .getByText(/小工具也能带来大改变/)
+        .last()
+        .isVisible(),
+    );
     await page.locator(".products").getByRole("link", { name: "ZPI Agent SDK", exact: true }).click();
     await page.frameLocator("#live").getByText("你好，我是 zpi agent sdk。", { exact: true }).waitFor();
+    assert.equal(await page.frameLocator("#live").locator("#zpi-frame").getAttribute("src"), null);
+    assert.equal(await page.frameLocator("#live").locator("#quick-frame").getAttribute("src"), null);
     await page.locator("#copy-command").click();
     assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "npm install @zpi-dev/agent-sdk");
     await page.setViewportSize({ width: 375, height: 812 });
@@ -122,6 +255,16 @@ async function quickBounds(page) {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.screenshot({ path: path.join(artifacts, "intro-mobile.png") });
     await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goBack();
+    await page.waitForSelector("html[data-product=zpi-quick-chat]");
+    await page.goBack();
+    await page.waitForSelector("html[data-product=zpi]");
+    await page.goForward();
+    await page.waitForSelector("html[data-product=zpi-quick-chat]");
+    assert.equal(await page.evaluate((original) => document === original, homeDocument), true);
+    assert.equal(await page.locator("#live").count(), 1);
+    assert.equal(await page.locator(".products [aria-current]").count(), 1);
+    assert.equal(await page.locator("#copy-status").textContent(), "");
     await page.reload();
     assert.match(await page.locator("#live").getAttribute("src"), /autoplay=0/);
     await context.close();
@@ -155,11 +298,6 @@ async function quickBounds(page) {
     const restored = await page.locator("#zpi-native-window").boundingBox();
     assert.equal(restored.width, 1200);
     assert.equal(restored.height, 800);
-    const minimum = await page.locator("#zpi-native-window").evaluate((node) => ({
-      width: getComputedStyle(node).minWidth,
-      height: getComputedStyle(node).minHeight,
-    }));
-    assert.deepEqual(minimum, { width: "740px", height: "560px" });
     for (const viewport of [
       { width: 1470, height: 740 },
       { width: 800, height: 600 },
@@ -169,16 +307,46 @@ async function quickBounds(page) {
       await page.setViewportSize(viewport);
       await page.waitForTimeout(80);
       const box = await page.locator("#zpi-native-window").boundingBox();
-      assert.ok(Math.abs(box.width / box.height - 1.5) < 0.002);
+      const metrics = await page.locator("#zpi-native-window").evaluate((win) => {
+        const doc = win.querySelector("iframe").contentDocument;
+        return {
+          scale: win.getBoundingClientRect().width / win.offsetWidth,
+          frameWidth: doc.defaultView.innerWidth,
+          font: doc.defaultView.getComputedStyle(doc.querySelector(".session-row")).fontSize,
+        };
+      });
+      assert.ok(Math.abs(metrics.scale - 1) < 0.005);
+      assert.ok(Math.abs(metrics.frameWidth - box.width) < 4);
+      assert.equal(metrics.font, "14px");
       assert.ok(
         box.x >= 0 &&
           box.y >= 0 &&
           box.x + box.width <= viewport.width + 1 &&
           box.y + box.height <= viewport.height - 66,
       );
-      assert.equal(await z.locator(".sidebar").evaluate((n) => getComputedStyle(n).width), "260px");
+      assert.ok(Math.abs(box.width / box.height - 1.5) < 0.002);
+      await assertDockedSidebar(z);
+      await z.getByTestId("right-sidebar-toggle").click();
+      await z.locator(".right-pane:not([hidden])").waitFor();
+      await assertDockedSidebar(z);
+      if (metrics.frameWidth <= 660) assert.equal(await z.locator("main.main").isVisible(), false);
+      else {
+        const [main, pane] = await Promise.all([
+          z.locator("main.main").boundingBox(),
+          z.locator(".right-pane").boundingBox(),
+        ]);
+        assert.ok(main.x + main.width <= pane.x + 1, `overlapping split at ${metrics.frameWidth}`);
+      }
+      await z.getByTestId("right-sidebar-toggle").click();
+      await z.locator("main.main").waitFor();
     }
+    await z.getByTestId("left-sidebar-toggle").click();
+    await z.locator(".sidebar").waitFor({ state: "hidden" });
     await page.setViewportSize({ width: 1470, height: 956 });
+    await page.waitForFunction(() => document.querySelector("#zpi-frame").contentWindow.innerWidth === 1200);
+    assert.equal(await z.getByTestId("left-sidebar-toggle").getAttribute("aria-expanded"), "false");
+    await z.getByTestId("left-sidebar-toggle").click();
+    await assertDockedSidebar(z);
     await z.locator(".model-trigger").click();
     for (const name of ["GPT-6.2 Sol", "GPT-6.2 Astra", "GPT-6.1 Terra", "GPT-6 Luna", "DeepSeek V4.1 Flash"])
       await z.locator(".model-menu").getByText(name, { exact: true }).waitFor();
@@ -324,6 +492,20 @@ async function quickBounds(page) {
     assert.equal(state, "编写一个 HTML 版贪吃蛇游戏");
     await page.locator(".dock [data-action=terminal]").click();
     const terminal = page.locator("#mac-terminal input");
+    const initial = await checkUtilityGeometry(page, "terminal", true);
+    const handle = await page.locator("#mac-terminal .mac-title strong").boundingBox();
+    await page.mouse.move(handle.x + 5, handle.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + 75, handle.y + 35);
+    await page.mouse.up();
+    const moved = await page.locator("#mac-terminal").boundingBox();
+    assert.ok(Math.abs(moved.x - initial.x - 70) < 2 && Math.abs(moved.y - initial.y - 30) < 2);
+    await page.locator("#mac-terminal [data-win=min]").click();
+    await page.locator(".dock [data-action=terminal]").click();
+    assert.deepEqual(await page.locator("#mac-terminal").boundingBox(), moved);
+    await page.locator("#mac-terminal [data-win=close]").click();
+    await page.locator(".dock [data-action=terminal]").click();
+    await checkUtilityGeometry(page, "terminal", true);
     assert.equal(await page.locator("#active-app").innerText(), "终端");
     await page.locator("#mac-terminal .mac-title strong").dblclick();
     assert.equal(await page.locator("#mac-terminal.zoom").count(), 1);
@@ -376,6 +558,9 @@ async function quickBounds(page) {
       const res = await frame.zpi.updatePreferences({ fontSize: 19, theme: "dark" });
       if (!res.ok || res.value.interface.fontSize !== 19) throw Error("could not set preferences");
     });
+    await z.locator("html[data-theme=dark]").waitFor();
+    assert.equal(await page.locator("html").getAttribute("data-site-theme"), "light");
+    await assertDarkZpiRim(page, page.locator("#zpi-native-window"));
     await page.reload();
     await page.waitForFunction(() => document.querySelector("#zpi-frame").contentWindow.zpiDemo);
     await page.evaluate(() => document.querySelector("#zpi-frame").contentWindow.zpiDemo.ready);
@@ -392,7 +577,7 @@ async function quickBounds(page) {
           localStorage.getItem("keep-test"),
         ];
       }),
-      [0, 14, "system", null, 0, "untouched"],
+      [0, 14, "light", null, 0, "untouched"],
     );
     await diagnostics(page);
     await context.close();
@@ -413,6 +598,7 @@ async function quickBounds(page) {
   {
     const { page, context, q, z } = await pageAt();
     await page.locator(".dock [data-open=quick]").click();
+    await q.locator("#input").waitFor();
     assert.equal(await page.locator("#active-app").innerText(), "ZPI Quick Chat");
     const compact = await quickBounds(page);
     assert.equal(compact.width, 384);
@@ -460,6 +646,10 @@ async function quickBounds(page) {
   {
     const { page, context, q } = await pageAt();
     await page.locator(".dock [data-open=quick]").click();
+    await q.locator("#input").waitFor();
+    await page
+      .locator("#quick-frame")
+      .evaluate((win) => Promise.all(win.getAnimations().map((a) => a.finished)));
     const start = await quickBounds(page),
       frame = await page.locator("#quick-frame").boundingBox();
     await page.mouse.move(frame.x + 24, frame.y + 3);
@@ -497,6 +687,29 @@ async function quickBounds(page) {
     );
   }
   {
+    const { page, context, q } = await pageAt("?app=zpi-quick-chat&autoplay=0&theme=dark");
+    assert.equal(
+      await q.locator("#composer").evaluate((n) => getComputedStyle(n).backgroundColor),
+      "rgb(43, 43, 43)",
+    );
+    await assertTransparentQuickCorners(page);
+    await q.locator("#input").fill("翻译");
+    await q.locator("#input").press("Enter");
+    await q
+      .getByText(/小工具也能带来大改变/)
+      .last()
+      .waitFor();
+    await assertTransparentQuickCorners(page);
+    await page.getByRole("button", { name: "深色模式" }).click();
+    assert.equal(await page.locator("#quick-frame").isVisible(), true);
+    assert.equal(
+      await q.locator("#composer").evaluate((n) => getComputedStyle(n).backgroundColor),
+      "rgb(255, 255, 255)",
+    );
+    await context.close();
+    console.log("PASS: Quick Chat compact and expanded dark corners match unobstructed desktop pixels");
+  }
+  {
     const { page, context, q } = await pageAt();
     for (const mode of ["translate", "web", "bash", "both", "missing"]) {
       if (mode === "translate") await page.locator(".dock [data-open=quick]").click();
@@ -530,7 +743,10 @@ async function quickBounds(page) {
     await page.locator(".dock [data-open=sdk]").click();
     assert.equal(await page.locator("#active-app").innerText(), "ZPI Agent SDK");
     assert.equal(await page.locator("#info-content").getByText(/安装/).count(), 0);
-    assert.equal(await page.locator("#sdk-form input").count(), 0);
+    assert.equal(
+      await page.locator("#sdk-form input, #info-content p, #info-content h2, #info-content small").count(),
+      0,
+    );
     await page.locator("#sdk-form button").click();
     assert.match(await page.locator("#sdk-output").textContent(), /等待/);
     await page.getByText("你好，我是 zpi agent sdk。", { exact: true }).waitFor();
@@ -578,6 +794,7 @@ async function quickBounds(page) {
       await page.evaluate(() => document.querySelector("#zpi-frame").contentWindow.zpiDemo.ready);
       const q = page.frameLocator("#quick-frame");
       await page.locator(".dock [data-open=quick]").click();
+      await q.locator("#input").waitFor();
       const another = await context.newPage();
       await another.goto("about:blank");
       await another.bringToFront();
@@ -675,6 +892,38 @@ async function quickBounds(page) {
     );
   }
   {
+    const startup = await browser.newContext();
+    await startup.addInitScript(() => {
+      if (window !== window.top) return;
+      new MutationObserver(() => {
+        const windows = [...document.querySelectorAll("#zpi-native-window,#quick-frame,#info-window")];
+        if (windows.length !== 3 || !document.querySelector(".dock")) return;
+        const visible = windows.find((win) => !win.hidden);
+        if (!visible) window.emptyDesktopAt ??= performance.now();
+        else window.firstWindowAt ??= performance.now();
+      }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+    });
+    for (const [app, selector] of [
+      ["zpi", "#zpi-native-window"],
+      ["zpi-quick-chat", "#quick-frame"],
+      ["zpi-agent-sdk", "#info-window"],
+    ]) {
+      const page = await startup.newPage();
+      await page.goto(`${base}/demo.html?app=${app}&autoplay=0`);
+      await page.locator(selector).waitFor();
+      const gap = await page.evaluate(() => window.firstWindowAt - window.emptyDesktopAt);
+      assert.ok(gap >= 990, `${app} showed after ${gap} ms`);
+      await page.close();
+    }
+    const takeover = await startup.newPage();
+    await takeover.goto(`${base}/demo.html?app=zpi-agent-sdk&autoplay=1`, { waitUntil: "domcontentloaded" });
+    await takeover.waitForFunction(() => window.zpiSite);
+    await takeover.locator(".dock [data-action=files]").click();
+    await takeover.waitForTimeout(1250);
+    assert.equal(await takeover.locator("#active-app").textContent(), "访达");
+    assert.equal(await takeover.locator("#info-window").isHidden(), true);
+    await startup.close();
+    console.log("PASS: all three apps start on an empty desktop for one second; Dock interaction takes over");
     for (const product of ["zpi-quick-chat", "zpi-agent-sdk"]) {
       const { page, context, q } = await pageAt("?app=" + product + "&autoplay=1");
       assert.equal(await page.locator("#zpi-native-window").isVisible(), false);
@@ -734,11 +983,13 @@ async function quickBounds(page) {
   }
   {
     const products = ["zpi", "zpi-quick-chat", "zpi-agent-sdk"];
-    const host = require("node:http").createServer((_, res) =>
+    const host = require("node:http").createServer((req, res) =>
       res
         .writeHead(200, { "Content-Type": "text/html" })
         .end(
-          `<main style="display:flex">${products.map((p) => `<iframe style="width:33%;height:640px" title="${p}" src="${base}/demo.html?app=${p}&autoplay=1"></iframe>`).join("")}</main>`,
+          req.url === "/below"
+            ? `<button autofocus>继续阅读</button><div style="height:140vh"></div><script>window.scrolled=false;addEventListener('scroll',()=>window.scrolled=true)</script><iframe width="860" height="510" title="quick" src="${base}/demo.html?app=zpi-quick-chat&autoplay=1"></iframe>`
+            : `<main style="display:flex">${products.map((p) => `<iframe style="width:33%;height:640px" title="${p}" src="${base}/demo.html?app=${p}&autoplay=1"></iframe>`).join("")}</main>`,
         ),
     );
     await new Promise((resolve) => host.listen(0, "127.0.0.1", resolve));
@@ -759,6 +1010,21 @@ async function quickBounds(page) {
       assert.equal(await two.locator("#quick-frame").isVisible(), true);
       assert.equal(await two.locator('[data-file$="/snake.html"]').count(), 0);
       assert.equal(await three.locator('[data-file$="/snake.html"]').count(), 0);
+      await page.goto(`http://127.0.0.1:${host.address().port}/below`);
+      const desk = page.frameLocator("iframe[title=quick]");
+      const chat = desk.frameLocator("#quick-frame");
+      await chat
+        .getByText(/小工具也能带来大改变/)
+        .last()
+        .waitFor();
+      assert.deepEqual(
+        await page.evaluate(() => [window.scrolled, scrollY, document.activeElement.tagName]),
+        [false, 0, "BUTTON"],
+      );
+      await chat.locator("#input").click();
+      assert.ok(await chat.locator("#input").evaluate((n) => n === n.ownerDocument.activeElement));
+      await desk.locator(".dock [data-open=zpi]").click();
+      await desk.frameLocator("#zpi-frame").locator(".shell.mac-desktop main.main").waitFor();
     } finally {
       await context.close();
       host.close();

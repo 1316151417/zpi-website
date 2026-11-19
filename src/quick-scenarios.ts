@@ -32,13 +32,11 @@ export function scenario(tools: ToolOptions): { prompt: string; steps: Step[] } 
           out.call({
             id: id("save"),
             name: "Bash",
-            input: `写入 ~/Desktop/${filename}（虚拟桌面）`,
+            input: `写入 ~/Desktop/${filename}`,
             offset: out.offset(),
             output: content,
           });
-          out.text(
-            `已把 **${filename}** 放在虚拟桌面。打开 Finder 就能离线阅读，也可以从 [GitHub 仓库](${repo}) 继续探索。`,
-          );
+          out.text(`已保存到桌面：**${filename}**。\n\n[GitHub 仓库](${repo})`);
         },
       ],
     };
@@ -54,18 +52,18 @@ export function scenario(tools: ToolOptions): { prompt: string; steps: Step[] } 
     };
   if (tools.bash)
     return {
-      prompt: "清理桌面上刚才演示生成的贪吃蛇 HTML。",
+      prompt: "清理桌面上刚生成的贪吃蛇 HTML。",
       steps: [
-        (out) => out.text("只检查虚拟桌面的 snake.html，不动其他文件。\n\n"),
+        (out) => out.text("只检查桌面的 snake.html，不动其他文件。\n\n"),
         (out) => {
           const path = DESKTOP + "/snake.html",
             node = files.stat(path);
           const generated = node?.type === "file" && node.content === snake;
           const result = generated
-            ? "已清理：snake.html 已从虚拟桌面移除。"
+            ? "已清理：snake.html 已从桌面移除。"
             : node
-              ? "同名项目不是原始演示文件，已保留，没有删除。"
-              : "虚拟桌面没有 snake.html，无需清理。";
+              ? "同名文件内容不同，已保留。"
+              : "桌面没有 snake.html，无需清理。";
           if (generated) files.remove(path);
           out.call({
             id: id("clean"),
