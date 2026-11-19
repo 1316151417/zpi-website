@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
+import { buildManuals } from "./manuals.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const zpi = resolve(process.env.ZPI_SOURCE || resolve(root, "../zpi"));
@@ -189,6 +190,7 @@ const config = {
 // Resolve shared React from the original workspace, not a second website copy.
 config.resolve.alias.react = dirname(requireZpi.resolve("react/package.json"));
 config.resolve.alias["react-dom"] = dirname(requireZpi.resolve("react-dom/package.json"));
+await buildManuals(quick);
 if (process.argv.includes("build")) await build(config);
 else {
   const server = await createServer(config);

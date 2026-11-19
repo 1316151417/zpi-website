@@ -8,7 +8,8 @@
     "build": "node scripts/runtime.mjs build",
     "preview": "node scripts/serve.cjs",
     "test": "node --test tests/core.test.cjs",
-    "test:browser": "node tests/browser.cjs"
+    "test:browser": "node tests/browser.cjs",
+    "test:manuals": "node tests/manual-examples.mjs && node tests/manuals.mjs"
   },
   "devDependencies": {
     "playwright": "^1.58.2"

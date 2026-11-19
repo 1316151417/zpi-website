@@ -69,6 +69,7 @@ if (
     el("setup").textContent = page.setup;
     el("copy-status").textContent = "";
     el("install").querySelector("details")!.open = false;
+    el<HTMLAnchorElement>("manual-link").href = `./manuals/${product}/index.html`;
     el<HTMLAnchorElement>("source-link").href = page.repo;
     el("notes").replaceChildren(el<HTMLTemplateElement>("notes-" + product).content.cloneNode(true));
     const demo = new URL("./demo.html", location.href);

@@ -48,6 +48,12 @@ npm run build
 
 每次进入演示先显示空桌面。一秒后，待目标界面就绪再开窗；等待时点击 Dock 可以直接接管。将 `autoplay` 设为 `0` 只打开目标应用，不运行。无参数保留 ZPI 默认演示。Dock 切换与真实键盘/指针输入会中断导览：已提交的工作可以继续，但不会强制跳到下一款产品。旧产品哈希入口仍可使用。每个顶层官网实例拥有自己的临时桌面；在其他主页中可分别嵌入这些地址。
 
+## 三本中文使用手册
+
+主页标题栏的「使用手册」在 GitHub 左侧，跟随当前产品，不进入交互桌面。直接打开 `manuals/zpi/index.html`、`manuals/zpi-quick-chat/index.html` 或 `manuals/zpi-agent-sdk/index.html` 即可阅读部署后的静态页。每册有教程、操作指南、参考手册、概念解释四个入口；`manuals/index.html` 是总索引。正文、导航和锚点无需 JavaScript 或服务端重写。
+
+源文位于 `manuals/<产品>/<分类>/*.md`，一个文件对应一个同名 `.html` 页面。用相对 `.md` 链接交叉引用；被其他文章引用的小节使用 `## 标题 {#stable-id}`。`scripts/manuals.mjs` 在开发服务器启动及生产构建时用相邻 Quick Chat 已装的 Marked 生成页面。单独预览内容变更可运行 `node scripts/manuals.mjs`；测试生产产物仍需重新构建。源码基线、任务与测试矩阵和档案勘误见 [维护清单](manuals/MAINTENANCE.md)。
+
 ## 原版复用范围
 
 ### ZPI
@@ -152,6 +158,7 @@ backup/                     原有文档，未修改
 npm test                    # 虚拟文件系统和任务取消单元测试
 npm run build
 npm run test:browser         # 对生产产物进行 Playwright 测试
+npm run test:manuals         # 需要相邻 SDK 的 dist/：离线验证示例、静态链接和手册导航（端口 4181）
 ```
 
 浏览器测试使用 ZPI 仓库的 Playwright，或通过 `CHROMIUM_PATH` 指定已有 Chromium。会自行启动 `127.0.0.1:4179`，完成后关闭；截图默认写到系统临时目录 `zpi-source-ui-tests`。
