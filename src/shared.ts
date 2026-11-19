@@ -17,9 +17,6 @@ export function site() {
     return undefined;
   }
 }
-export function notify(text: string) {
-  site()?.notify(text);
-}
 export function onTrustedInput(callback: () => void) {
   for (const name of ["pointerdown", "keydown", "input"])
     document.addEventListener(

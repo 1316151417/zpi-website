@@ -1,6 +1,6 @@
-# ZPI website — 原版前端源码集成
+# ZPI 官网
 
-本版本替换了第一版独立绘制的绿色演示界面。**ZPI 和 Quick Chat 的应用内部界面直接由原产品源码渲染，不维护另一套 UI，不修改产品配色、组件大小或设置页布局。**
+主页介绍 ZPI、ZPI Quick Chat 和 ZPI Agent SDK，提供安装方法并嵌入独立的交互桌面。桌面里的 ZPI 和 Quick Chat 使用原产品前端源码，不维护另一套 UI，不修改产品配色、组件大小或设置页布局。
 
 ## 启动
 
@@ -33,14 +33,18 @@ npm run build
 
 构建后的 `dist/` 不需要两个源码仓库或 Node.js 后端，上传普通静态服务器即可。**由于原前端使用 ES modules、动态导入和 Worker，需通过 HTTP/HTTPS 打开，不能再以 `file://` 双击运行。** 生成的 `snake.html` 仍是独立、可离线打开的 HTML。
 
-## 演示入口（可用于 iframe）
+## 主页与演示入口
+
+`index.html` 是介绍主页，通过 `?product=zpi|zpi-quick-chat|zpi-agent-sdk` 直达对应产品的安装说明和交互演示。一次只加载当前产品的 iframe。
+
+`demo.html` 是可单独打开或嵌入其他站点的交互桌面。例如：`./demo.html?app=zpi&autoplay=1`。原有根路径 `?app=…`、`?autoplay=…` 和产品哈希链接兼容跳转至该入口。下表的参数均用于演示页。
 
 | 查询参数 | 自动演示 |
 | --- | --- |
 | `?app=zpi&autoplay=1` | 演示任务：打字、执行过程、写入游戏、浏览器预览 |
 | `?app=zpi-quick-chat&autoplay=1` | ZPI Quick Chat：键入翻译请求并展示结果 |
 | `?app=zpi-agent-sdk&autoplay=1` | ZPI Agent SDK：一秒后显示固定问候 |
-| `?app=all&autoplay=1` | 按上述顺序播放，每个完成并短暂停留后关闭，包括最后一个 |
+| `?app=all&autoplay=1` | 按上述顺序播放；每段结果短暂停留后关闭窗口，间隔三秒再打开下一款，最后一款结束后留在桌面 |
 
 将 `autoplay` 设为 `0` 只打开目标应用，不运行。无参数保留 ZPI 默认演示。Dock 切换与真实键盘/指针输入会中断导览：已提交的工作可以继续，但不会强制跳到下一款产品。旧产品哈希入口仍可使用。每个顶层官网实例拥有自己的临时桌面；在其他主页中可分别嵌入这些地址。
 
@@ -113,14 +117,16 @@ ZPI 主应用首次自动输入“帮我写一个 HTML 版贪吃蛇游戏”。�
 
 Dock 的访达和终端是独立的模拟 Mac 窗口。访达只有桌面和 Macintosh HD 两个入口，支持只读浏览、图标/列表视图、前进/后退和路径栏。文件打开在单独的“文本编辑”窗口，编辑同步到本页虚拟文件，不写入本机。桌面终端从虚拟主目录开始，提供分类帮助、命令历史及 Tab 命令/路径补全。标题栏双击与绿色按钮用于在虚拟桌面内最大化和还原。ZPI 右侧栏仍使用原 xterm 组件。两种终端共享的沙箱支持：`help`、`pwd`、`ls`、`cd`、`cat`、`mkdir`、`touch`、`mv`、`rm`、`echo`、`open`、`clear`、`date`、`whoami`。不会执行用户电脑上的 Shell。
 
-**各产品的场景**：Quick Chat 两个工具都关时翻译示例句；只开联网时展示 ZPI 仓库的 GitHub 来源；只开本机工具时仅清理未修改的虚拟 `snake.html`；两者都开时将双语项目卡片写到虚拟桌面。联网来源是预设，不做实时搜索。ZPI Agent SDK 无需输入参数，一秒后固定回复“你好，我是 zpi agent sdk。”。产品从 Dock 切换，菜单栏显示前台应用及仅作装饰的 File / Edit / View / Window；官网不提供安装或重播入口。
+**各产品的场景**：Quick Chat 两个工具都关时翻译示例句；只开联网时展示 ZPI 仓库的 GitHub 来源；只开本机工具时仅清理未修改的虚拟 `snake.html`；两者都开时将双语项目卡片写到虚拟桌面。联网来源是预设，不做实时搜索。ZPI Agent SDK 无需输入参数，一秒后固定回复“你好，我是 zpi agent sdk。”。产品从 Dock 切换，菜单栏显示前台应用及仅作装饰的 File / Edit / View / Window；交互桌面不提供安装或重播入口；安装说明在独立介绍主页。
 
 **模型目录**：`src/demo-models.ts` 按 ID 从本体 `packages/ai/src/providers/catalog.json` 读取四款 GPT 和 `deepseek-flash`，使用目录里的展示名、上下文与推理选项。
 
 ## 文件结构
 
 ```text
-index.html                  官网桌面外壳
+index.html                  产品介绍主页
+src/home.ts / home.css       产品切换、安装说明与主页视觉
+demo.html                   独立交互桌面外壳
 zpi.html                    ZPI 原始入口容器
 quick.html                  从原 Quick Chat HTML 生成
 src/site.ts                 前台应用、桌面和快捷键路由
@@ -152,4 +158,4 @@ npm run test:browser         # 对生产产物进行 Playwright 测试
 
 覆盖源码哈希、原始布局、全部设置分类、原始对话/预览、运行中操作、原 xterm/文件树、取消任务，以及 Quick Chat 的失焦/固定、快捷键、草稿、拖动、缩放、底部中心锚点和重开状态。
 
-安装入口的产品设计另行决定，不在当前官网中展示。
+主页的安装命令用于本机终端；网页内的交互演示不需要安装或提供凭据。

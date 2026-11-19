@@ -26,7 +26,7 @@ async function pageAt(query = "?autoplay=0") {
   page.on("request", (request) => {
     if (/^https?:/.test(request.url()) && !request.url().startsWith(base)) network.push(request.url());
   });
-  await page.goto(base + "/" + query);
+  await page.goto(base + "/demo.html" + query);
   await page.waitForFunction(() => Boolean(document.querySelector("#zpi-frame").contentWindow.zpiDemo));
   await page.evaluate(() => document.querySelector("#zpi-frame").contentWindow.zpiDemo.ready);
   await page.waitForTimeout(300);
@@ -94,6 +94,41 @@ async function quickBounds(page) {
   browser = await chromium.launch(
     process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
   );
+  {
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      permissions: ["clipboard-read", "clipboard-write"],
+    });
+    const page = await context.newPage();
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto(base);
+    assert.equal(await page.locator(".products [aria-current=page]").textContent(), "ZPI");
+    await page.frameLocator("#live").locator('[data-file$="/snake.html"]').waitFor({ timeout: 25000 });
+    await page.screenshot({ path: path.join(artifacts, "intro-desktop.png") });
+    await page.locator(".products").getByRole("link", { name: "ZPI Quick Chat", exact: true }).click();
+    await page
+      .frameLocator("#live")
+      .frameLocator("#quick-frame")
+      .getByText(/小工具也能带来大改变/)
+      .last()
+      .waitFor();
+    assert.equal(await page.locator("#command").textContent(), "npx @zpi-dev/quick-chat");
+    await page.locator(".products").getByRole("link", { name: "ZPI Agent SDK", exact: true }).click();
+    await page.frameLocator("#live").getByText("你好，我是 zpi agent sdk。", { exact: true }).waitFor();
+    await page.locator("#copy-command").click();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "npm install @zpi-dev/agent-sdk");
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({ path: path.join(artifacts, "intro-mobile.png") });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.reload();
+    assert.match(await page.locator("#live").getAttribute("src"), /autoplay=0/);
+    await context.close();
+    console.log(
+      "PASS: product navigation, single live embed, installation clipboard, mobile and reduced motion",
+    );
+  }
   {
     const { page, context, z } = await pageAt();
     assert.equal(await z.locator(".shell.mac-desktop").count(), 1);
@@ -205,6 +240,12 @@ async function quickBounds(page) {
   }
   {
     const { page, context, z } = await pageAt("");
+    const taskOrder = () =>
+      z
+        .locator(".sidebar")
+        .getByText(/^(复杂任务|演示任务)$/)
+        .allTextContents();
+    assert.deepEqual(await taskOrder(), ["复杂任务", "演示任务"]);
     await page.waitForFunction(() => {
       const doc = document.querySelector("#zpi-frame").contentDocument,
         el = doc.querySelector("[contenteditable=true]"),
@@ -215,9 +256,11 @@ async function quickBounds(page) {
     });
     await z.locator("[data-testid=thinking-block]").first().waitFor();
     await z.locator("[data-tool-name=write]").waitFor();
+    assert.deepEqual(await taskOrder(), ["演示任务", "复杂任务"]);
     await complete(page);
     const preview = z.frameLocator(".browser-webview iframe");
     await preview.locator("#start").click();
+    assert.deepEqual(await taskOrder(), ["演示任务", "复杂任务"]);
     assert.equal(await preview.locator("#overlay").isVisible(), false);
     await preview.locator("canvas").press("Space");
     assert.equal(await preview.locator("#heading").textContent(), "休息一下");
@@ -266,9 +309,11 @@ async function quickBounds(page) {
   {
     const { page, context, z } = await pageAt();
     await send(page, "今天的天气如何？");
+    assert.equal(await page.locator("#notice").isHidden(), true);
     await z.getByRole("button", { name: "设置", exact: true }).click();
     await z.getByRole("button", { name: "模型", exact: true }).click();
     await complete(page);
+    assert.equal(await page.locator("#notice").isHidden(), true);
     assert.equal(await z.locator(".shell.show-settings").count(), 1);
     assert.equal(await z.locator(".browser-webview").count(), 0);
     await z.locator(".settings-back").click();
@@ -528,6 +573,7 @@ async function quickBounds(page) {
       page.on("pageerror", (error) => errors.push(error.message));
       await page.setViewportSize({ width: 1470, height: 956 });
       await page.goto(base + "/?autoplay=0");
+      await page.waitForURL("**/demo.html?autoplay=0");
       await page.waitForFunction(() => Boolean(document.querySelector("#zpi-frame").contentWindow.zpiDemo));
       await page.evaluate(() => document.querySelector("#zpi-frame").contentWindow.zpiDemo.ready);
       const q = page.frameLocator("#quick-frame");
@@ -632,18 +678,47 @@ async function quickBounds(page) {
     for (const product of ["zpi-quick-chat", "zpi-agent-sdk"]) {
       const { page, context, q } = await pageAt("?app=" + product + "&autoplay=1");
       assert.equal(await page.locator("#zpi-native-window").isVisible(), false);
-      if (product === "zpi-quick-chat")
+      if (product === "zpi-quick-chat") {
         await q.getByText("小工具也能带来大改变。", { exact: false }).last().waitFor();
-      else await page.getByText("你好，我是 zpi agent sdk。", { exact: true }).waitFor();
+        assert.equal(await page.locator("#notice").isHidden(), true);
+      } else {
+        await page.getByText("你好，我是 zpi agent sdk。", { exact: true }).waitFor();
+        for (const viewport of [
+          { width: 894, height: 612 },
+          { width: 375, height: 540 },
+        ]) {
+          await page.setViewportSize(viewport);
+          await page.locator("#sdk-form button").click();
+          await page.getByText("你好，我是 zpi agent sdk。", { exact: true }).waitFor();
+          const rect = (sel) => page.locator(sel).boundingBox();
+          const [reply, body, win, dock] = await Promise.all(
+            ["#sdk-output", "#info-content", "#info-window", ".dock"].map(rect),
+          );
+          assert.ok(reply.y >= body.y - 1 && reply.y + reply.height <= body.y + body.height + 1);
+          assert.ok(win.y + win.height <= dock.y);
+        }
+      }
       await context.close();
     }
     const { page, context } = await pageAt("?app=all&autoplay=1");
+    await page.evaluate(() => {
+      window.tourTimes = {};
+      for (const id of ["zpi-native-window", "quick-frame", "info-window"]) {
+        const win = document.getElementById(id);
+        new MutationObserver(() => {
+          window.tourTimes[id + (win.hidden ? ":closed" : ":opened")] = performance.now();
+        }).observe(win, { attributes: true, attributeFilter: ["hidden"] });
+      }
+    });
     await complete(page);
     await page.locator("#quick-frame").waitFor();
     assert.equal(await page.locator("#zpi-native-window").isVisible(), false);
-    await page.getByText("你好，我是 zpi agent sdk。", { exact: true }).waitFor({ timeout: 12000 });
+    await page.getByText("你好，我是 zpi agent sdk。", { exact: true }).waitFor({ timeout: 18000 });
     assert.equal(await page.locator("#quick-frame").isVisible(), false);
     await page.locator("#info-window").waitFor({ state: "hidden" });
+    const times = await page.evaluate(() => window.tourTimes);
+    assert.ok(times["quick-frame:opened"] - times["zpi-native-window:closed"] >= 2990);
+    assert.ok(times["info-window:opened"] - times["quick-frame:closed"] >= 2990);
     await context.close();
     const paused = await pageAt("?app=zpi-agent-sdk&autoplay=0");
     await paused.page.waitForTimeout(1800);
@@ -663,7 +738,7 @@ async function quickBounds(page) {
       res
         .writeHead(200, { "Content-Type": "text/html" })
         .end(
-          `<main style="display:flex">${products.map((p) => `<iframe style="width:33%;height:640px" title="${p}" src="${base}/?app=${p}&autoplay=1"></iframe>`).join("")}</main>`,
+          `<main style="display:flex">${products.map((p) => `<iframe style="width:33%;height:640px" title="${p}" src="${base}/demo.html?app=${p}&autoplay=1"></iframe>`).join("")}</main>`,
         ),
     );
     await new Promise((resolve) => host.listen(0, "127.0.0.1", resolve));

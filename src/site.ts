@@ -98,7 +98,12 @@ function sdk() {
     e.preventDefault();
     clearTimeout(sdkTimer);
     output.textContent = "等待回复…";
-    sdkTimer = setTimeout(() => (output.textContent = greeting), 1000);
+    sdkTimer = setTimeout(() => {
+      output.textContent = greeting;
+      const content = $("#info-content");
+      if (!infoWindow.hidden && output.getBoundingClientRect().bottom > content.getBoundingClientRect().bottom)
+        content.scrollTop = content.scrollHeight;
+    }, 1000);
   };
 }
 let focusBeforeQuick: Element | null = null;
@@ -134,7 +139,6 @@ function shortcut(event: KeyboardEvent) {
 }
 (window as any).zpiSite = {
   files,
-  notify,
   quickWindow,
   showFiles: mac.showFinder,
   shortcut,
@@ -249,7 +253,9 @@ async function launch() {
     autoplay =
       url.searchParams.get("autoplay") === "1" ||
       (url.searchParams.get("autoplay") !== "0" && (initial === "zpi" || initial === "all"));
-  for (const product of (initial === "all" ? sequence : [initial]) as DemoApp[]) {
+  const products = initial === "all" ? sequence : [initial];
+  for (const [index, product] of products.entries()) {
+    if (index > 0) await delay(3000, signal);
     signal.throwIfAborted();
     if (product === "zpi") {
       showZpi();

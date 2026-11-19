@@ -7,7 +7,7 @@ import {
   isReadOnly,
   onDemoCompleted,
 } from "./desktop-bridge";
-import { PROMPT, core, notify, onTrustedInput, site } from "./shared";
+import { PROMPT, onTrustedInput, site } from "./shared";
 import { delay, waitUntil } from "./playback";
 import { installSelectionCopy } from "./selection-copy";
 installSelectionCopy(".markdown-body");
@@ -38,7 +38,6 @@ onDemoCompleted(({ sid, path, uninterrupted }) => {
     site()?.isZpiFrontmost() !== false
   )
     void panes.openBrowser(toFileUrl(path), sid);
-  else notify(`${core.basename(path)} 已生成，可以从桌面或文件链接打开。`);
 });
 
 const lockSelector =

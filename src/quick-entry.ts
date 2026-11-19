@@ -1,7 +1,7 @@
 import type { Bridge, Snapshot, ToolCall } from "@source/quick/types.ts";
 import { validateImages, inputLimits } from "@source/quick/input.ts";
 import "@source/quick/style.css";
-import { clone, core, id, clipboard, site, notify, onTrustedInput } from "./shared";
+import { clone, core, id, clipboard, site, onTrustedInput } from "./shared";
 import type { QuickWindow } from "./quick-window";
 import { scenario } from "./quick-scenarios";
 import { delay, waitUntil } from "./playback";
@@ -67,7 +67,6 @@ function start(input: any) {
   };
   state.messages.push(assistant);
   sendSnapshot();
-  notify("ZPI Quick Chat 预设演示 · 不调用模型或实时搜索");
   let index = 0;
   const advance = () => {
     if (state.generation !== input.generation || !state.busy) return;

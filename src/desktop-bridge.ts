@@ -34,7 +34,6 @@ import {
   clone,
   id,
   site,
-  notify,
   clipboard,
   openStandalone,
   onTrustedInput,
@@ -307,7 +306,6 @@ async function start(input: any) {
     modelLabel: `${model?.name ?? selected.modelId} ${modelReasoningLabel(model, selected.reasoning)}`,
   });
   emit("onTasksChanged");
-  if (input.text !== PROMPT) notify("交互演示：本次提交已转换为「编写 HTML 版贪吃蛇游戏」，不调用真实模型。");
   let finishThinking: (() => void) | undefined,
     writeId = "";
   const runner = new core.DemoRunner((step: any) => {
@@ -973,6 +971,8 @@ files.subscribe(({ paths }: FileChange) => {
 export function createDesktopBridge(): DesktopBridge {
   if (!sessions.length) {
     const demo = newSession("desktop");
+    const seededAt = demo.createdAt;
+    demo.createdAt = demo.updatedAt = seededAt - 120000;
     demo.title = "演示任务";
     demo.draft = false;
     views.get(demo.id).title = demo.title;
@@ -985,10 +985,11 @@ export function createDesktopBridge(): DesktopBridge {
         id: sid,
         title: view.title,
         parentSessionId: sid === CHILD ? COMPLEX : undefined,
-        running: true,
+        // The transcript depicts a running task; the read-only exhibit has no live runner.
+        running: false,
         status: "running",
-        createdAt: demo.createdAt - 60000,
-        updatedAt: demo.updatedAt - 60000,
+        createdAt: seededAt - 60000,
+        updatedAt: seededAt - 60000,
         ...(sid === COMPLEX ? { pendingQuestion: { id: "sample-question" } } : {}),
       });
     }

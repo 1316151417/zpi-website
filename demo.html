@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="在独立的临时桌面上体验 ZPI、ZPI Quick Chat 和 ZPI Agent SDK。"><title>ZPI — 交互式桌面</title><link rel="icon" href="/zpi-icon.png"></head>
+<body>
+  <header class="system-menu"><span class="apple" aria-hidden="true"></span><strong id="active-app" class="app-name">ZPI</strong><span class="menu-decoy">File</span><span class="menu-decoy">Edit</span><span class="menu-decoy">View</span><span class="menu-decoy">Window</span><span class="menu-space"></span><time id="clock"></time></header>
+  <main id="desktop" class="desktop">
+    <div class="desktop-files" id="desktop-files" aria-label="桌面文件"></div>
+    <section class="zpi-native-window" id="zpi-native-window" data-app="ZPI" aria-label="ZPI 桌面窗口"><iframe id="zpi-frame" title="ZPI 原始界面"></iframe><div id="zpi-resize" aria-hidden="true"></div></section>
+    <iframe id="quick-frame" data-app="ZPI Quick Chat" class="quick-native-window" title="ZPI Quick Chat 原始界面" hidden></iframe>
+    <section id="info-window" class="info-window" hidden><header><div class="lights"><button data-win="close" data-action="close-info" aria-label="关闭窗口"></button><button data-win="min" data-action="hide-info" aria-label="最小化窗口"></button><button data-win="zoom" data-action="zoom-info" aria-label="缩放窗口"></button></div><strong id="info-title"></strong></header><div id="info-content"></div></section>
+    <nav class="dock" aria-label="应用程序"><button data-open="zpi" title="ZPI"><img src="/zpi-icon.png" alt="ZPI"><span>ZPI</span></button><button data-open="quick" title="ZPI Quick Chat"><img src="/src/quick-chat.svg" alt="ZPI Quick Chat"><span>ZPI Quick Chat</span></button><button data-open="sdk" title="ZPI Agent SDK"><img src="/src/agent-sdk.svg" alt="ZPI Agent SDK"><span>ZPI Agent SDK</span></button><i></i><button data-action="files" title="访达"><img src="/file-actions/finder.png" alt="Finder"><span>访达</span></button><button data-action="terminal" title="终端"><span class="terminal-dock-icon">❯_</span><span>终端</span></button></nav>
+    <div id="notice" role="status" hidden></div>
+  </main>
+  <script type="module" src="/src/site.ts"></script>
+  <noscript>请启用 JavaScript 以体验交互式桌面。</noscript>
+</body></html>

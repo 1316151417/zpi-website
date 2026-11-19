@@ -134,6 +134,7 @@ const config = {
     rolldownOptions: {
       input: {
         index: resolve(root, "index.html"),
+        demo: resolve(root, "demo.html"),
         zpi: resolve(root, "zpi.html"),
         quick: resolve(root, "quick.html"),
       },
