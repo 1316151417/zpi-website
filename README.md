@@ -64,6 +64,8 @@ location ^~ /zpi/ {
 }
 ```
 
+当前公网 IP 与未来域名的部署策略不同：`101.200.240.206` 的 80 端口只把 `/zpi/` 转给本机 8080；其专用虚拟主机的兜底 `location / { return 404; }`，不要保留根目录裸 `index.html`、`/manuals/`、`/assets/` 的静态匹配。独立 `/open-zread/` 保留自己的 location。子域名根部署能力不改变这项 IP 入口限制。
+
 先移除与所选入口冲突的旧 `/zpi/` 重定向，启用静态 MIME 表（尤其 `.js`、`.css`、`.wasm`），不要把缺失资源重写成首页。DNS 和 HTTPS 证书需在部署时配置；以上示例不修改现有服务器。`MOUNT_PATH=/zpi PORT=4180 npm run preview` 可在 `http://127.0.0.1:4180/zpi/` 验收子路径；`npm run test:mounts` 在两个隔离的本地地址验证同一产物。
 
 ## 三本中文使用手册

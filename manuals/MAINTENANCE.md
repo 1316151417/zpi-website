@@ -8,6 +8,10 @@
 
 `legacy.mjs` 保留发布过的旧路径与小节 ID，指向相应的新课；不要为了改标题而改 slug。导航无需 JS。四个原分类索引继续可访问。生成目录和测试截图不入库。
 
+## 阅读结构与界面依据
+
+SDK 的概览和 TypeScript 参考分别对照 Claude Code 官方中文 [SDK 概览](https://code.claude.com/docs/zh-CN/agent-sdk/overview) 与 [TypeScript 参考](https://code.claude.com/docs/zh-CN/agent-sdk/typescript) 的信息结构：前者讲入口选择、能力和起步；后者讲签名、参数、类型、返回值与示例。导航按读者主题常显，实作作为主题内链接；不复制 Claude 特有的 API、品牌或服务条款。`sdk-navigation.mjs` 将每篇稿映射到唯一主题。`sdk-contract.mjs` 维护 ZPI 的中文运行语义，`scripts/sdk-reference.mjs` 从发行包 `.d.ts` 提取真实签名；新增选项或控制方法而未写说明会阻断构建。目录、正文、锚点和完整查找索引无需 JS；`reader.js` 仅增强搜索、复制和位置提示。
+
 ## 核验产品
 
 | 范围 | 源码对照 |

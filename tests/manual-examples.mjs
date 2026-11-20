@@ -101,6 +101,10 @@ try {
   run([...mock, "branch.mts"], { match: /离线回复/ });
   const example = (args, match, extra = {}, status = 0) =>
     run([...mock, ...args], { match, environment: { ...env, ...extra }, status });
+  const trace = example(["trace-loop.mts"], /4 完成/);
+  assert.match(trace, /2 请求工具 lookup_order sample-call/);
+  assert.match(trace, /3 工具响应 sample-call/);
+  example(["trace-loop.mts"], /没有成功的查询记录/, { FIXTURE_SKIP_TOOL: "1" }, 1);
   example(["orders.mts", "42"], /业务记录：已发货/);
   example(["orders.mts", "99"], /业务记录：未找到/);
   example(["orders.mts", "42"], /模型没有查询订单/, { FIXTURE_SKIP_TOOL: "1" }, 1);

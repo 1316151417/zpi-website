@@ -19,7 +19,12 @@ const route = (s) => `/manuals/${s}`,
   home = (id) => route(`${id}/index.html`);
 const manuscripts = new Map(),
   counts = {},
-  pages = new Set([route("index.html"), route("versions.html")]),
+  pages = new Set([
+    route("index.html"),
+    route("versions.html"),
+    route("find.html"),
+    route("zpi-agent-sdk/typescript.html"),
+  ]),
   archived = new Set();
 for (const [id, b] of Object.entries(products)) {
   let n = 0,
@@ -45,7 +50,7 @@ for (const [id, b] of Object.entries(products)) {
     archived.add(url);
   }
 }
-assert.deepEqual(counts, { zpi: [30, 153], "zpi-quick-chat": [6, 25], "zpi-agent-sdk": [18, 76] });
+assert.deepEqual(counts, { zpi: [30, 153], "zpi-quick-chat": [6, 25], "zpi-agent-sdk": [20, 84] });
 const server = spawn(process.execPath, [join(root, "scripts/serve.cjs")], {
   env: { ...process.env, PORT: port, STATIC_ROOT: join(root, "dist") },
   stdio: ["ignore", "pipe", "inherit"],
@@ -71,7 +76,14 @@ async function staticCheck() {
     assert.equal(r.status, 200, path);
     const nodes = [...walk(parse(await r.text()))];
     assert.equal(nodes.filter((n) => n.tagName === "h1").length, 1, path);
-    assert.ok(!nodes.some((n) => ["script", "iframe"].includes(n.tagName)), path);
+    assert.ok(
+      !nodes.some(
+        (n) =>
+          n.tagName === "iframe" ||
+          (n.tagName === "script" && (text(n).trim() || !attr(n, "src")?.endsWith("reader.js"))),
+      ),
+      path,
+    );
     const ids = nodes.map((n) => attr(n, "id")).filter(Boolean);
     assert.equal(ids.length, new Set(ids).size, path);
     docs.set(path, new Set(ids));
@@ -149,19 +161,16 @@ async function staticCheck() {
   );
 }
 const lookups = [
-  ["zpi", "审查文件改动", "review/last-turn", "不要求目录是 Git 仓库"],
-  ["zpi-quick-chat", "把眼前的内容带进来", "capture/selection", "Option+Shift+C"],
-  ["zpi-agent-sdk", "把回答交给应用", "output/stream", "includePartialMessages"],
+  ["zpi", "review/last-turn", "不要求目录是 Git 仓库"],
+  ["zpi-quick-chat", "capture/selection", "Option+Shift+C"],
+  ["zpi-agent-sdk", "output/stream", "includePartialMessages"],
 ];
 async function navigate(page, mobile) {
-  for (const [book, group, task, clue] of lookups) {
+  for (const [book, task, clue] of lookups) {
     await page.goto(base + home(book));
     const nav = page.locator(mobile ? ".mobile-nav" : ".book-nav");
     if (mobile) await nav.locator(":scope > summary").click();
-    const part = nav.locator("details.part").filter({ has: page.getByText(group, { exact: true }) });
-    if ((await part.count()) && (await part.getAttribute("open")) === null)
-      await part.locator(":scope > summary").click();
-    await nav.getByText(group, { exact: true }).click();
+    assert.equal(await nav.locator(".chapters details").count(), 0, "topics must be direct links");
     const link = nav.locator(`a[href="${task}.html"]`);
     assert.ok(await link.isVisible());
     await link.click();
@@ -178,35 +187,11 @@ async function navigate(page, mobile) {
 }
 async function checkDisclosures(page) {
   await page.goto(base + route("zpi/start/trust.html"));
-  const part = page
-    .locator(".book-nav .part")
-    .filter({ has: page.getByText("在任务里工作", { exact: true }) });
-  const summary = part.locator(":scope > summary");
-  const state = () =>
-    summary.evaluate((el) => ({
-      open: el.parentElement.open,
-      mark: getComputedStyle(el, "::after").maskImage,
-      direction: getComputedStyle(el, "::after").transform,
-      focus: document.activeElement === el,
-    }));
-  const closed = await state();
-  assert.equal(closed.open, false);
-  assert.notEqual(closed.mark, "none");
-  await summary.focus();
-  await summary.press("Enter");
-  assert.deepEqual(await state(), {
-    ...closed,
-    open: true,
-    focus: true,
-    direction: "matrix(0, 1, -1, 0, 0, 0)",
-  });
-  const child = part.locator(".nav-group summary").first();
-  await child.focus();
-  await child.press("Space");
-  assert.ok(await part.locator(".nav-group a").first().isVisible());
-  await summary.focus();
-  await summary.press("Space");
-  assert.ok(!(await part.locator(".nav-group a").first().isVisible()));
+  assert.equal(await page.locator(".book-nav details").count(), 0);
+  const direct = page.locator('.book-nav a[href="../review/last-turn.html"]');
+  await direct.focus();
+  await direct.press("Enter");
+  assert.equal(new URL(page.url()).pathname, route("zpi/review/last-turn.html"));
   assert.ok(await page.locator('.book-nav [aria-current="page"]').isVisible());
   await page.setViewportSize({ width: 390, height: 844 });
   const phone = page.locator(".mobile-nav > summary");
@@ -271,6 +256,28 @@ try {
     }),
   );
   const dark = await browser.newPage({ viewport: { width: 1280, height: 880 }, colorScheme: "dark" });
+  await dark.goto(base + home("zpi-agent-sdk"));
+  await dark.locator('.book-nav a[href="typescript.html"]').click();
+  for (const hash of [
+    "query",
+    "options",
+    "options-maxturns",
+    "zpioptions-sessionmanager",
+    "query-stoptask",
+    "listsessions",
+    "sdkresultmessage",
+  ])
+    assert.ok(await dark.locator(`[id="${hash}"]`).count(), hash);
+  await dark.locator(".copy-page").click();
+  await dark.getByRole("button", { name: /已复制|已选中/ }).waitFor();
+  await dark.locator(".search-link").click();
+  await dark.locator("#find-input").fill("maxTurns");
+  await dark.getByRole("link", { name: "Options.maxTurns", exact: true }).click();
+  assert.equal(await dark.locator(":target").getAttribute("id"), "options-maxturns");
+  await dark.goto(base + home("zpi-agent-sdk"));
+  await dark.emulateMedia({ colorScheme: "light" });
+  await dark.screenshot({ path: join(output, "sdk-overview-editorial.png") });
+  await dark.emulateMedia({ colorScheme: "dark" });
   await dark.goto(base + route("zpi-agent-sdk/output/stream.html"));
   await dark.screenshot({ path: join(output, "sdk-stream-dark.png") });
   for (const [id] of Object.entries(products)) {

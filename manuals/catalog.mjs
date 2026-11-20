@@ -64,6 +64,8 @@ export const products = {
       ["管理会话、存储与委派", "state"],
       ["加载扩展与对接宿主", "extensions"],
       ["生产配置与 API 索引", "integrate"],
+      ["Agent SDK 指南", "guide"],
+      ["开发概念", "concepts"],
     ],
     picks: [
       "workshop/cli",
