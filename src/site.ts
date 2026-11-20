@@ -12,8 +12,11 @@ const desktop = $("#desktop"),
   zpiFrame = $<HTMLIFrameElement>("#zpi-frame"),
   quickFrame = $<HTMLIFrameElement>("#quick-frame"),
   infoWindow = $("#info-window");
+const homepageProduct = window.frameElement?.getAttribute("data-product-preview");
+const phoneLayout = homepageProduct ? matchMedia("(max-width: 540px)") : undefined;
+if (homepageProduct) document.documentElement.dataset.homePreview = homepageProduct;
 const quickWindow = new QuickWindow(quickFrame, desktop),
-  geometry = zpiGeometry(zpiWindow, desktop, $("#zpi-resize"));
+  geometry = zpiGeometry(zpiWindow, desktop, $("#zpi-resize"), phoneLayout);
 const app = () => (zpiFrame.contentWindow as any)?.zpiDemo;
 const url = new URL(location.href),
   initial = requestedApp(url),
@@ -156,6 +159,8 @@ function shortcut(event: KeyboardEvent) {
   }
 }
 (window as any).zpiSite = {
+  homepageProduct,
+  phoneLayout,
   files,
   quickWindow,
   showFiles: mac.showFinder,

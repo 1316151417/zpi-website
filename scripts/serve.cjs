@@ -3,14 +3,19 @@ const fs = require("node:fs");
 const path = require("node:path");
 const root = path.resolve(process.env.STATIC_ROOT || path.resolve(__dirname, "../dist"));
 const port = Number(process.env.PORT || 4173);
+// Same distribution, different URL mounts; never fall back to serving HTML for missing assets.
+const mount = (process.env.MOUNT_PATH || "").replace(/\/+$/, "");
+if (mount && !/^\/(?:[\w-]+\/)*[\w-]+$/.test(mount)) throw Error("Invalid MOUNT_PATH");
 const types = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".md": "text/plain; charset=utf-8",
+  ".mts": "text/plain; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
+  ".webp": "image/webp",
   ".wasm": "application/wasm",
   ".woff2": "font/woff2",
   ".woff": "font/woff",
@@ -18,8 +23,18 @@ const types = {
 http
   .createServer((request, response) => {
     try {
-      const pathname = decodeURIComponent(new URL(request.url, "http://localhost").pathname);
-      const file = path.resolve(root, "." + (pathname === "/" ? "/index.html" : pathname));
+      const url = new URL(request.url, "http://localhost");
+      const pathname = decodeURIComponent(url.pathname);
+      if (mount && url.pathname === mount) {
+        response.writeHead(308, { Location: mount + "/" + url.search }).end();
+        return;
+      }
+      if (!pathname.startsWith(mount + "/")) {
+        response.writeHead(404).end("Not found");
+        return;
+      }
+      const local = pathname.slice(mount.length);
+      const file = path.resolve(root, "." + local, ...(local.endsWith("/") ? ["index.html"] : []));
       const relative = path.relative(root, file);
       if (
         relative.startsWith("..") ||
@@ -49,4 +64,6 @@ http
       response.writeHead(404).end("Not found");
     }
   })
-  .listen(port, "127.0.0.1", () => console.log(`ZPI playground: http://127.0.0.1:${port}`));
+  .listen(port, "127.0.0.1", function () {
+    console.log(`ZPI playground: http://127.0.0.1:${this.address().port}${mount}/`);
+  });

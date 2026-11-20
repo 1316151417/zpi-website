@@ -43,12 +43,24 @@ if (
   location.replace("./demo.html" + url.search + url.hash);
 } else {
   const root = document.documentElement;
+  const phone = matchMedia("(max-width: 580px)");
+  const stage = document.querySelector(".stage")!;
+  const cover = document.querySelector(".cover")!;
+  const arrangeInstall = () => {
+    if (phone.matches) stage.after(el("install"));
+    else cover.append(el("install"));
+  };
+  arrangeInstall();
+  phone.addEventListener("change", arrangeInstall);
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const nav = document.querySelector<HTMLElement>(".products")!;
   const links = [...nav.querySelectorAll<HTMLAnchorElement>("a[data-product]")];
-  const productFromURL = () => {
-    const requested = new URL(location.href).searchParams.get("product") ?? "";
-    return Object.hasOwn(pages, requested) ? (requested as DemoApp) : "zpi";
+  const validProduct = (value: unknown): value is DemoApp =>
+    typeof value === "string" && Object.hasOwn(pages, value);
+  const fromAddress = () => new URL(location.href).searchParams.get("product");
+  const resolveProduct = (state?: DemoApp): DemoApp => {
+    const requested = fromAddress() ?? state;
+    return validProduct(requested) ? requested : "zpi";
   };
   let current: DemoApp;
   function render(product: DemoApp) {
@@ -78,6 +90,7 @@ if (
     // A fresh browsing context cancels the old tour without adding child-frame history entries.
     const live = document.createElement("iframe");
     live.id = "live";
+    live.dataset.productPreview = product;
     live.dataset.themeFrame = "";
     live.title = page.name + " 交互演示";
     live.src = demo.href;
@@ -94,7 +107,14 @@ if (
     }
   }
   window.addEventListener("zpi-theme-change", syncStandaloneTheme);
-  render(productFromURL());
+  // A clean URL is a fresh Desktop on reload. A traversal back from another document
+  // restores the selected tab even when the browser didn't retain this document in BFCache.
+  const traversal =
+    (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type ===
+    "back_forward";
+  const initial = resolveProduct(traversal ? history.state?.homeProduct : undefined);
+  render(initial);
+  history.replaceState({ ...history.state, homeProduct: initial }, "");
   nav.addEventListener("click", (event) => {
     if (
       event.defaultPrevented ||
@@ -109,11 +129,13 @@ if (
     if (!link) return;
     event.preventDefault();
     const product = link.dataset.product as DemoApp;
-    if (product === productFromURL()) return;
-    history.pushState(null, "", link.href);
+    if (product === current) return;
+    const address = new URL(location.href);
+    address.searchParams.delete("product");
+    history.pushState({ ...history.state, homeProduct: product }, "", address);
     render(product);
   });
-  window.addEventListener("popstate", () => render(productFromURL()));
+  window.addEventListener("popstate", (event) => render(resolveProduct(event.state?.homeProduct)));
   el("copy-command").onclick = async () => {
     const product = current;
     try {

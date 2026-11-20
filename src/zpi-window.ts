@@ -2,7 +2,7 @@ type Rect = { width: number; height: number; x: number; y: number };
 const original = { width: 1200, height: 800 };
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(n, max));
 
-export function zpiGeometry(frame: HTMLElement, desktop: HTMLElement, grip: HTMLElement) {
+export function zpiGeometry(frame: HTMLElement, desktop: HTMLElement, grip: HTMLElement, phoneLayout?: MediaQueryList) {
   let preferred = { ...original };
   let position: { x: number; y: number } | undefined;
   let maximized = false,
@@ -12,15 +12,16 @@ export function zpiGeometry(frame: HTMLElement, desktop: HTMLElement, grip: HTML
     const gap = maximized ? 0 : Math.min(12, w * 0.02, h * 0.02);
     // Fit the window rectangle, not its contents: preserve the 3:2 opening shape without scaling text.
     const fit = Math.min(1, (w - 2 * gap) / preferred.width, (h - 2 * gap) / preferred.height);
-    const width = maximized ? w : preferred.width * fit;
-    const height = maximized ? h : preferred.height * fit;
+    const phone = phoneLayout?.matches;
+    const width = maximized ? w : phone ? w - 2 * gap : preferred.width * fit;
+    const height = maximized ? h : phone ? h - 2 * gap : preferred.height * fit;
     const x = maximized ? 0 : clamp(position?.x ?? (w - width) / 2, 0, w - width);
     const y = maximized ? 0 : clamp(position?.y ?? (h - height) / 2, 0, h - height);
     rect = { x, y, width, height };
     Object.assign(frame.style, { left: `${x}px`, top: `${y}px`, width: `${width}px`, height: `${height}px` });
   }
   function gesture(event: PointerEvent, resize: boolean) {
-    if (event.button !== 0 || maximized) return;
+    if (event.button !== 0 || maximized || phoneLayout?.matches) return;
     const target = event.target as HTMLElement,
       start = rect,
       sx = event.screenX,

@@ -9,6 +9,7 @@
     "preview": "node scripts/serve.cjs",
     "test": "node --test tests/core.test.cjs",
     "test:browser": "node tests/browser.cjs",
+    "test:mounts": "node tests/mounts.mjs",
     "test:manuals": "node tests/manual-examples.mjs && node tests/manuals.mjs"
   },
   "devDependencies": {

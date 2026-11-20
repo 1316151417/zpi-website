@@ -68,6 +68,135 @@ async function assertDockedSidebar(z) {
     if (panel) assert.ok(side.x + side.width <= panel.x + 1, `left sidebar overlaps ${selector}`);
   }
 }
+async function checkWideShowcase(page, app, startButton) {
+  const stage = page.locator("#live");
+  for (const [width, height, expectedHeight] of [[1600, 900, 680], [1920, 1080, 720], [2560, 1440, 720]]) {
+    await page.setViewportSize({ width, height });
+    assert.equal((await stage.boundingBox()).height, expectedHeight);
+    await page.waitForFunction(() => {
+      const desktop = document.querySelector("#live").contentDocument;
+      return desktop.querySelector("#zpi-frame").contentDocument.querySelector(".sidebar").getBoundingClientRect().width === 200;
+    });
+    const widths = await app.locator(".workspace-surface").evaluate((w) =>
+      [".sidebar", "main.main", ".right-pane"].map((s) => w.querySelector(s).getBoundingClientRect().width),
+    );
+    assert.ok(widths[1] > widths[0] && widths[1] > widths[2], `wide showcase columns: ${widths}`);
+    const names = await app.locator(".session-name .task-title-overflow").evaluateAll((els) =>
+      els.filter((el) => el.clientWidth >= el.querySelector(".task-title-copy").scrollWidth)
+        .map((el) => el.querySelector(".task-title-copy").textContent),
+    );
+    assert.deepEqual(names, ["演示任务", "复杂任务"]);
+    assert.equal(await app.locator(".sidebar .task-question-badge").getByText("等待确认", { exact: true }).isVisible(), true);
+    assert.ok(await startButton.evaluate((button) => {
+      const r = button.getBoundingClientRect(), board = button.closest(".board").getBoundingClientRect();
+      return r.top >= board.top && r.bottom <= board.bottom;
+    }), `Snake start button clipped at ${width}×${height}`);
+    if (width === 1920) await page.screenshot({ path: path.join(artifacts, "intro-wide-zpi.png") });
+  }
+  const splitter = app.locator(".sidebar-resizer");
+  await splitter.press("ArrowRight");
+  for (const [width, height] of [[1599, 1080], [1920, 899]]) {
+    await page.setViewportSize({ width, height });
+    assert.ok((await stage.boundingBox()).height <= 620, "short or narrow viewports keep the original stage");
+  }
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await app.locator('.sidebar-resizer[aria-valuenow="216"]').waitFor();
+  await splitter.press("ArrowLeft");
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+async function checkShowcaseSettings() {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: "reduce" });
+  try {
+    const page = await context.newPage();
+    page.setDefaultTimeout(12000);
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto(base);
+    const stage = page.locator("#live"), desktop = page.frameLocator("#live"), app = desktop.frameLocator("#zpi-frame");
+    const sidebar = app.getByTestId("left-sidebar-toggle");
+    await sidebar.waitFor();
+    assert.equal(await sidebar.getAttribute("aria-expanded"), "false");
+    assert.ok((await app.locator("main.main").boundingBox()).width > 300);
+    assert.ok(await stage.evaluate(el => el.getBoundingClientRect().width >= document.querySelector('.workbench').clientWidth - 1 && el.getBoundingClientRect().bottom <= document.querySelector('#install').getBoundingClientRect().top));
+    await sidebar.tap();
+    await app.getByRole("button", { name: "设置", exact: true }).tap();
+    const settings = app.locator(".settings-screen"), tabs = settings.locator(".settings-tabs");
+    for (const width of [320, 390, 1366, 1920]) {
+      await page.setViewportSize({ width, height: width < 500 ? 844 : 1080 });
+      await tabs.getByRole("button", { name: "界面设置", exact: true }).click();
+      const panel = await settings.locator(".settings-main").boundingBox();
+      const nav = await settings.locator(".settings-sidebar").boundingBox();
+      assert.ok(panel.height > 140 && panel.width > 240, `visible settings form at ${width}`);
+      if (width < 500) assert.ok(nav.y + nav.height <= panel.y + 1, "phone navigation above form");
+      else assert.ok(nav.x + nav.width <= panel.x + 1, "desktop navigation beside form");
+      assert.ok(await settings.locator(".settings-back span").evaluate(el => el.clientWidth > 12 && getComputedStyle(el).clipPath === "none"));
+      const theme = app.getByRole("combobox", { name: "界面主题", exact: true });
+      await theme.click();
+      const themeName = width === 320 ? "深色" : "浅色";
+      await app.getByRole("option", { name: themeName, exact: true }).click();
+      assert.ok((await theme.innerText()).includes(themeName));
+      await tabs.getByRole("button", { name: "模型", exact: true }).click();
+      const providers = settings.getByRole("navigation", { name: "提供商列表" });
+      for (const [label, protocol] of [["DeepSeek", "OpenAI Chat Completions"], ["OpenAI", "OpenAI Responses"]]) {
+        const provider = providers.getByRole("button", { name: label, exact: true });
+        assert.ok(await provider.locator("span").filter({ hasText: label }).isVisible());
+        await provider.click();
+        await settings.locator("#provider-api-format").filter({ hasText: protocol }).waitFor();
+      }
+      assert.ok(await settings.locator(".settings-scroll").evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+      if (width === 390 || width === 1920) await stage.screenshot({ path: path.join(artifacts, `settings-model-${width}.png`) });
+      await settings.getByRole("button", { name: "编辑模型 gpt-6.2-sol", exact: true }).click();
+      const dialog = app.getByRole("dialog", { name: "编辑模型配置" });
+      const capacity = dialog.getByLabel("上下文容量");
+      await capacity.fill("16384");
+      assert.equal(await capacity.inputValue(), "16384");
+      assert.ok(await capacity.evaluate(el => {
+        const rect = el.getBoundingClientRect();
+        return rect.x >= 0 && rect.right <= innerWidth && rect.width >= 200;
+      }));
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      await dialog.waitFor({ state: "hidden" });
+    }
+    await settings.locator(".settings-back").click();
+    await app.locator(".sidebar .session-row.active").filter({ hasText: "演示任务" }).waitFor();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await sidebar.getAttribute("aria-expanded"), "true", "a manual sidebar choice survives resize");
+  } finally { await context.close(); }
+  console.log("PASS: phone demo first, readable settings navigation and usable appearance/model forms across phone and desktop embeds");
+}
+async function checkLaptopPreview(page, app) {
+  const card = app.locator('.assistant-preview-card[data-preview-type="website"]');
+  for (const width of [1536, 1470, 1366, 1280]) {
+    await page.setViewportSize({ width, height: 850 });
+    await card.scrollIntoViewIfNeeded();
+    const layout = await card.evaluate((el) => {
+      const rect = (node) => node.getBoundingClientRect();
+      const row = rect(el), title = el.querySelector(".assistant-preview-title");
+      const buttons = [...el.querySelectorAll("button")].map(rect);
+      return {
+        frame: innerWidth,
+        columns: [".sidebar", "main.main", ".right-pane"].map((s) => rect(document.querySelector(s)).width),
+        name: title.textContent, fullTitle: title.clientWidth >= title.scrollWidth,
+        contained: buttons.length === 2 && buttons.every((b) => b.width > 0 && b.left >= row.left && b.right <= row.right && b.top >= row.top && b.bottom <= row.bottom),
+        stacked: buttons[0].top >= rect(title).bottom,
+        cardWidth: row.width,
+      };
+    });
+    const [left, center, right] = layout.columns;
+    assert.ok(center > left && center > right && left > 0 && right > 0, JSON.stringify(layout));
+    if (width >= 1470) assert.ok(center >= layout.frame * 0.49 && right <= layout.frame * 0.31, JSON.stringify(layout));
+    assert.equal(layout.name, "snake.html");
+    assert.ok(layout.fullTitle && layout.contained, JSON.stringify(layout));
+    assert.equal(layout.stacked, layout.cardWidth <= 248);
+  }
+  await card.getByRole("button", { name: "选择打开方式" }).click();
+  const menuItem = app.getByRole("menuitem", { name: "使用默认程序打开" });
+  await menuItem.waitFor();
+  await menuItem.press("Escape");
+  await app.getByTestId("right-sidebar-toggle").click();
+  await app.locator(".right-pane").waitFor({ state: "hidden" });
+  await card.getByRole("button", { name: "打开", exact: true }).click();
+  await app.frameLocator('.pane-content:not([hidden]) .browser-webview iframe').locator("#start").waitFor();
+}
 async function assertDarkZpiRim(page, frame) {
   const { x, y, width } = await frame.boundingBox();
   const strip = await page.screenshot({
@@ -167,6 +296,24 @@ async function quickBounds(page) {
   browser = await chromium.launch(
     process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
   );
+  await checkShowcaseSettings();
+  {
+    const context = await browser.newContext();
+    const origin = "http://showcase.invalid";
+    await context.route(origin + "/**", async (route) => {
+      const url = new URL(route.request().url());
+      await route.fulfill({ response: await route.fetch({ url: base + url.pathname + url.search }) });
+    });
+    const page = await context.newPage();
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto(origin + "/demo.html?app=zpi&autoplay=1");
+    assert.equal(await page.evaluate(() => isSecureContext), false);
+    await page.locator('[data-file$="/snake.html"]').waitFor({ timeout: 25000 });
+    await page.frameLocator("#zpi-frame").frameLocator(".browser-webview iframe").locator("#start").waitFor();
+    assert.match(await page.evaluate(() => crypto.randomUUID()), /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    await context.close();
+    console.log("PASS: non-local HTTP desktop can generate IDs and open the playable preview");
+  }
   {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
@@ -202,6 +349,7 @@ async function quickBounds(page) {
     const app = desktop.frameLocator("#zpi-frame");
     assert.equal(await page.locator("html").getAttribute("data-site-theme"), "light");
     await app.locator("html[data-theme=light]").waitFor();
+    await checkWideShowcase(page, app, startButton);
     await themeSwitch.click();
     await app.locator("html[data-theme=dark]").waitFor();
     await assertDarkZpiRim(page, desktop.locator("#zpi-native-window"));
@@ -221,6 +369,7 @@ async function quickBounds(page) {
     await desktop.locator(".dock [data-action=files]").click();
     await checkUtilityGeometry(desktop, "finder");
     await desktop.locator("#mac-finder [data-win=close]").click();
+    await checkLaptopPreview(page, app);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.locator(".products").getByRole("link", { name: "ZPI Quick Chat", exact: true }).click();
     await page
@@ -233,6 +382,8 @@ async function quickBounds(page) {
     assert.equal(await page.locator("#command").textContent(), "npx @zpi-dev/quick-chat");
     assert.equal(await page.locator("#headline").textContent(), "叫出来问。用完收起。");
     assert.equal(await desktop.locator("#zpi-frame").getAttribute("src"), null);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    assert.equal((await page.locator("#live").boundingBox()).height, 720);
     const quick = desktop.frameLocator("#quick-frame");
     const inputColor = () => quick.locator("#composer").evaluate((n) => getComputedStyle(n).backgroundColor);
     assert.equal(await inputColor(), "rgb(43, 43, 43)");
@@ -246,6 +397,7 @@ async function quickBounds(page) {
     );
     await page.locator(".products").getByRole("link", { name: "ZPI Agent SDK", exact: true }).click();
     await page.frameLocator("#live").getByText("你好，我是 zpi agent sdk。", { exact: true }).waitFor();
+    assert.equal((await page.locator("#live").boundingBox()).height, 720);
     assert.equal(await page.frameLocator("#live").locator("#zpi-frame").getAttribute("src"), null);
     assert.equal(await page.frameLocator("#live").locator("#quick-frame").getAttribute("src"), null);
     await page.locator("#copy-command").click();
@@ -329,7 +481,7 @@ async function quickBounds(page) {
       await z.getByTestId("right-sidebar-toggle").click();
       await z.locator(".right-pane:not([hidden])").waitFor();
       await assertDockedSidebar(z);
-      if (metrics.frameWidth <= 660) assert.equal(await z.locator("main.main").isVisible(), false);
+      if (metrics.frameWidth <= 550) assert.equal(await z.locator("main.main").isVisible(), false);
       else {
         const [main, pane] = await Promise.all([
           z.locator("main.main").boundingBox(),
@@ -378,6 +530,8 @@ async function quickBounds(page) {
     await page.screenshot({ path: path.join(artifacts, "zpi-settings.png") });
     await z.locator(".settings-back").click();
     await z.locator(".sidebar").getByText("复杂任务", { exact: true }).first().click();
+    await z.locator("body.demo-read-only").waitFor();
+    assert.ok(!await z.locator(".composer-container").first().evaluate(el => getComputedStyle(el, "::before").content.includes("只读")));
     await z.locator(".user-question-card[inert]").waitFor();
     await z.locator(".conversation-navigator[data-visible=true]").waitFor();
     assert.ok(await z.locator(".task-activity[data-running=true]").count());

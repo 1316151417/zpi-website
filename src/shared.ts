@@ -8,6 +8,16 @@ export const PROMPT = core.PROMPT as string;
 export const files = site()?.files ?? new core.FileSystem();
 export type FileChange = { paths: string[]; entriesChanged: boolean };
 export const clone = <T>(value: T): T => structuredClone(value);
+// On public HTTP the original renderers still need UUIDs, but only getRandomValues is available.
+if (typeof crypto.randomUUID !== "function") {
+  crypto.randomUUID = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  };
+}
 export const id = (prefix: string) => prefix + "-" + crypto.randomUUID();
 export function site() {
   // The desktop itself may be embedded on a different origin.

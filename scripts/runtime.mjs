@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { readFile, writeFile, mkdir, cp } from "node:fs/promises";
+import { readFile, writeFile, mkdir, cp, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -13,11 +13,12 @@ const requireZpi = createRequire(resolve(zpi, "package.json"));
 const { build, createServer } = await import(pathToFileURL(requireZpi.resolve("vite")).href);
 const tailwind = (await import(pathToFileURL(requireZpi.resolve("@tailwindcss/vite")).href)).default;
 
+// Vite copies public/ wholesale, including stale files from previous builds.
+await rm(resolve(root, "public/backup"), { recursive: true, force: true });
 await mkdir(resolve(root, "public"), { recursive: true });
 await cp(resolve(zpi, "packages/desktop/src/renderer/public"), resolve(root, "public"), { recursive: true });
 const assets = Promise.all([
   cp(resolve(zpi, "icon.png"), resolve(root, "public/zpi-icon.png")),
-  cp(resolve(root, "backup"), resolve(root, "public/backup"), { recursive: true }),
   ...["cmaps", "standard_fonts", "wasm"].map((dir) =>
     cp(resolve(zpi, "node_modules/pdfjs-dist", dir), resolve(root, "public/pdfjs", dir), { recursive: true }),
   ),

@@ -15,9 +15,17 @@ import "./native-chrome.css";
 
 window.zpi = createDesktopBridge();
 installWebviewAdapter();
+const panes = await import("@source/desktop/renderer/pane-store.ts");
+// The reference workspace gives the preview one third of the space beside the task list.
+// Keep the upstream splitter in charge after the visitor adjusts it.
+const setPaneRatio = (ratio: number) => document.documentElement.style.setProperty("--demo-pane-ratio", String(ratio));
+panes.usePane.setState({ ratio: 1 / 3 });
+setPaneRatio(panes.usePane.getState().ratio);
+panes.usePane.subscribe((state, previous) => {
+  if (state.ratio !== previous.ratio) setPaneRatio(state.ratio);
+});
 await import("@source/desktop/renderer/main.tsx");
 const { useStore, drafts, newSession } = await import("@source/desktop/renderer/store.ts");
-const panes = await import("@source/desktop/renderer/pane-store.ts");
 
 const native = document.createElement("div");
 native.className = "native-window-buttons lights";

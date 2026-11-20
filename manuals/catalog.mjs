@@ -1,27 +1,108 @@
 export const sections = {
-  tutorial: ["教程", "第一次用", "按顺序做完一件小事，并检查结果。"],
-  "how-to": ["操作指南", "我要做一件事", "从手头的问题出发，找操作步骤和排查方法。"],
-  reference: ["参考手册", "查一个准确答案", "查名称、默认值、生效范围和限制。"],
-  explanation: ["概念解释", "理解为什么", "弄清看起来相似的操作究竟有何不同。"],
+  tutorial: "教程",
+  "how-to": "操作指南",
+  reference: "参考手册",
+  explanation: "概念解释",
 };
 
 export const products = {
   zpi: {
     name: "ZPI Desktop",
-    description: "在桌面工作区里管理项目、检查文件改动，保留任务的来龙去脉。",
-    baseline: "桌面源码 0.3.35 · 59be3dc",
-    picks: ["how-to/review", "tutorial/first-edit", "reference/tools"],
+    short: "Desktop",
+    version: "0.3.37",
+    description: "在自己的文件夹里做一项修改，打开差异，亲自验收。",
+    start: "start/first-edit",
+    parts: [
+      ["开始使用", "start"],
+      ["在任务里工作", "conversations"],
+      ["检查和验证结果", "workbench"],
+      ["管理多个任务", "tasks"],
+      ["按需开启能力", "capabilities"],
+      ["模型、界面与排错", "settings"],
+    ],
+    picks: [
+      "start/first-model",
+      "review/last-turn",
+      "revisions/fork",
+      "documents/element",
+      "agents/explore",
+      "memory/project",
+    ],
+    kinds: {
+      tutorial: ["start"],
+      reference: ["lookup", "data", "usage", "tools"],
+      explanation: ["memory", "instructions", "plugins"],
+    },
   },
   "zpi-quick-chat": {
     name: "ZPI Quick Chat",
-    description: "在原应用选取材料，带进浮窗。核对、发送，再回到手头的工作。",
-    baseline: "源码 0.1.14 · aa5f344 · 锁定 SDK 0.1.63",
-    picks: ["how-to/capture", "reference/shortcuts", "tutorial/selection", "how-to/tools"],
+    short: "Quick Chat",
+    version: "0.1.14",
+    description: "在眼前的应用选一句话，叫出浮窗提问，读完回去。",
+    start: "start/translate",
+    parts: [["使用浮窗", "handbook"]],
+    picks: [
+      "capture/selection",
+      "capture/screenshot",
+      "window/pin",
+      "window/reset",
+      "capabilities/web",
+      "help/hotkey",
+    ],
+    kinds: { tutorial: ["start"], reference: ["help"], explanation: ["window"] },
   },
   "zpi-agent-sdk": {
     name: "ZPI Agent SDK",
-    description: "用 TypeScript 发起查询、消费事件，并接入自己的工具与存储。",
-    baseline: "SDK 源码 0.1.65 · 59be3dc",
-    picks: ["reference/results", "tutorial/first-query", "how-to/custom-tool", "reference/host"],
+    short: "Agent SDK",
+    version: "0.1.65",
+    description: "用 TypeScript 发起查询，把结果、工具和会话接进自己的程序。",
+    start: "start/first",
+    parts: [
+      ["第一条查询与常用配方", "build-app"],
+      ["做一个真正的应用", "application"],
+      ["接消息、工具与批准", "execution"],
+      ["管理会话、存储与委派", "state"],
+      ["加载扩展与对接宿主", "extensions"],
+      ["生产配置与 API 索引", "integrate"],
+    ],
+    picks: [
+      "workshop/cli",
+      "events/tool-pair",
+      "policy/hooks",
+      "history/undo",
+      "storage/adapter",
+      "host/owner",
+    ],
+    kinds: {
+      tutorial: ["start", "workshop"],
+      reference: ["api", "diagnose"],
+      explanation: ["lifecycle", "production", "host"],
+    },
   },
 };
+
+// The manuscripts are grouped for editing; every ## entry becomes a separate, addressable article.
+export function parsePart(source) {
+  const groups = [];
+  let article;
+  for (const line of source.trimEnd().split(/\r?\n/)) {
+    const hit = /^(#{1,2}) ([a-z][a-z0-9-]*) \| (.+)$/.exec(line);
+    if (hit?.[1] === "#") {
+      groups.push({ id: hit[2], title: hit[3], articles: [] });
+      article = undefined;
+    } else if (hit) {
+      if (!groups.length) throw Error("Article without group");
+      article = { id: hit[2], title: hit[3], body: "" };
+      groups.at(-1).articles.push(article);
+    } else if (article) article.body += line + "\n";
+    else if (line.trim()) throw Error(`Unexpected manuscript line: ${line}`);
+  }
+  for (const g of groups) {
+    if (!g.articles.length) throw Error(`Empty group: ${g.id}`);
+    for (const a of g.articles) {
+      a.body = a.body.trim();
+      if (!a.body) throw Error(`Empty article: ${a.id}`);
+    }
+  }
+  return groups;
+}

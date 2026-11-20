@@ -1,0 +1,58 @@
+/* The renderer switches to icons at 1024px to leave room for the editor. In a
+   showcase window keep the category names and reflow the editor independently. */
+.shell.show-settings {
+@media (max-width: 1023px) {
+  .settings-screen {
+    grid-template-columns: clamp(133px, 19vw, 194px) minmax(0, 1fr);
+  }
+  .settings-screen .settings-main { container: demo-settings / inline-size; }
+  .settings-screen .settings-tabs button,
+  .settings-screen .settings-back {
+    justify-content: flex-start;
+    padding-inline: 8px;
+  }
+  .settings-screen :is(.settings-back, .settings-tabs button) > span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: nowrap;
+  }
+  .settings-screen .settings-sidebar-drag-space { max-height: 48px; }
+  .settings-main .settings-content { padding-inline: clamp(14px, 4%, 28px); }
+  .settings-screen .settings-layout.model-provider-panel {
+    grid-template-columns: minmax(118px, 23%) minmax(0, 1fr);
+    min-height: 0;
+    align-content: start;
+  }
+  .settings-main .model-provider-panel .provider-list :is(h3, button span) { display: block; }
+  .settings-main .provider-api-field .settings-select-trigger { height: auto; min-height: 32px; }
+  .settings-main .provider-api-field .settings-select-value { white-space: normal; text-align: left; overflow-wrap: anywhere; }
+}
+@container demo-settings (max-width: 600px) {
+  .settings-main .settings-layout.model-provider-panel { grid-template-columns: minmax(0, 1fr); }
+  .settings-screen .model-provider-panel .provider-list { border-right: 0; border-bottom: 1px solid var(--color-border); }
+  .model-provider-panel .provider-nav-group { flex-flow: row wrap; align-items: center; }
+  .model-provider-panel .provider-nav-group h3 { margin: 0 4px; }
+  .model-provider-panel .model-row-summary { flex-wrap: wrap; }
+  .settings-screen .interface-settings .settings-select-trigger { width: min(48%, 260px); }
+  .settings-screen .general-settings .settings-row { grid-template-columns: minmax(0, 1fr) auto; }
+}
+@media (max-width: 540px) {
+  .settings-screen { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .settings-screen .settings-sidebar { padding: 0 6px 4px; min-width: 0; }
+  .settings-screen .settings-sidebar-drag-space { display: none; }
+  .settings-screen .settings-back { align-self: flex-start; height: 40px; margin: 4px 0 2px 88px; }
+  [data-home-preview] & .settings-screen .settings-back { margin-left: 0; }
+  .settings-screen .settings-tabs { flex-direction: row; overflow-x: auto; gap: 2px; }
+  .settings-screen .settings-tabs button { width: auto; height: 38px; }
+  .settings-screen .settings-tabs button svg { display: none; }
+  .settings-screen .settings-main { margin: 0 4px 4px; }
+  .settings-screen .settings-titlebar:empty { height: 10px; }
+  .settings-screen .settings-row { padding: 10px; gap: 8px; }
+  .settings-main .model-provider-panel .provider-editor { padding: 10px; }
+  .settings-main .provider-model-row { gap: 4px; padding-inline: 6px; }
+  .settings-main .model-row-name { width: 100%; white-space: normal; overflow-wrap: anywhere; }
+}
+}

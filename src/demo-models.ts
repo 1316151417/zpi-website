@@ -12,7 +12,7 @@ export const demoProviders: ProviderRecord[] = [
   {
     id: "demo",
     name: "OpenAI",
-    preset: "openai",
+    preset: "openai-api",
     api: "openai-responses",
     baseUrl: providerBaseUrl("openai-api", "openai-responses"),
     hasApiKey: true,

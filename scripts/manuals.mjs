@@ -2,122 +2,245 @@ import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promi
 import { createRequire } from "node:module";
 import { dirname, posix, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { products, sections } from "../manuals/catalog.mjs";
+import { parsePart, products, sections } from "../manuals/catalog.mjs";
+import { legacy } from "../manuals/legacy.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const input = resolve(root, "manuals");
-const output = resolve(root, "public/manuals");
-const escape = (value) => String(value).replace(/[&<>"']/g, (c) =>
-  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const input = resolve(root, "manuals"),
+  output = resolve(root, "public/manuals");
+const esc = (text) =>
+  String(text).replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
+const read = (file) => readFile(resolve(input, file), "utf8");
+const marks = { zpi: "zpi-app.webp", "zpi-quick-chat": "quick-chat.svg", "zpi-agent-sdk": "agent-sdk.svg" };
 
-async function loadArticles(Marked, Renderer) {
-  const articles = [];
-  for (const product of Object.keys(products)) {
-    for (const group of Object.keys(sections)) {
-      const dir = resolve(input, product, group);
-      for (const file of (await readdir(dir)).filter((f) => f.endsWith(".md")).sort()) {
-        if (!/^[a-z][a-z0-9-]*\.md$/.test(file)) throw Error(`Invalid manual slug: ${file}`);
-        const key = `${group}/${file.slice(0, -3)}`;
-        const path = `${product}/${key}.html`;
-        const source = (await readFile(resolve(dir, file), "utf8")).trim();
-        const match = /^# ([^\n]+)\n+([\s\S]+)$/.exec(source);
-        if (!match) throw Error(`Missing manual title or body: ${path}`);
-        const headings = [];
-        const ids = new Set();
-        const renderer = new Renderer();
-        renderer.heading = function ({ depth, text }) {
-          const [, name, explicit] = /^(.*?)(?:\s+\{#([a-z][\w-]*)\})?$/.exec(text);
-          const id = explicit ?? name.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").toLowerCase();
-          if (!id || ids.has(id)) throw Error(`Ambiguous heading in ${path}: ${name}`);
-          ids.add(id);
-          if (depth === 2) headings.push({ id, name });
-          return `<h${depth} id="${escape(id)}">${escape(name)}</h${depth}>\n`;
-        };
-        renderer.link = function (token) {
-          return Renderer.prototype.link.call(this, { ...token, href: token.href.replace(/\.md(?=#|$)/, ".html") });
-        };
-        const html = new Marked({ renderer, gfm: true }).parse(match[2]);
-        articles.push({ product, group, key, path, title: match[1], html, headings });
+export async function buildManuals(quick, zpi = resolve(process.env.ZPI_SOURCE || resolve(root, "../zpi"))) {
+  const { createHighlighter } = await import(
+    pathToFileURL(createRequire(resolve(zpi, "package.json")).resolve("shiki")).href
+  );
+  const highlighter = await createHighlighter({
+    themes: ["github-dark"],
+    langs: ["typescript", "bash", "markdown"],
+  });
+  const languages = {
+    ts: ["typescript", "TypeScript"],
+    sh: ["bash", "Shell"],
+    zsh: ["bash", "zsh"],
+    md: ["markdown", "Markdown"],
+  };
+  const { Marked, Renderer } = await import(
+    pathToFileURL(createRequire(resolve(quick, "package.json")).resolve("marked")).href
+  );
+  const examples = new Map();
+  function markdown(source, pagePath) {
+    const headings = [],
+      renderer = new Renderer();
+    renderer.code = function ({ text, lang: info }) {
+      const [lang, file] = (info ?? "").split(/\s+/);
+      let download = "";
+      if (file) {
+        if (
+          lang !== "ts" ||
+          !/^zpi-agent-sdk\//.test(pagePath ?? "") ||
+          !/^[-a-z0-9]+\.mts$/.test(file) ||
+          examples.has(file)
+        )
+          throw Error(`Invalid or duplicate example: ${file}`);
+        examples.set(file, text + "\n");
+        const target = posix.relative(posix.dirname(pagePath), "zpi-agent-sdk/examples/" + file);
+        download = `<a href="${esc(target)}" download="${esc(file)}">下载 ${esc(file)}</a>`;
+      }
+      const [grammar, label] = languages[lang] ?? [undefined, lang || "文本"];
+      const code = grammar
+        ? highlighter
+            .codeToTokensBase(text, { lang: grammar, theme: "github-dark" })
+            .map((line) =>
+              line.map((t) => `<span style="color:${esc(t.color)}">${esc(t.content)}</span>`).join(""),
+            )
+            .join("\n")
+        : esc(text);
+      return `<figure class="listing"><figcaption>${esc(label)}${download}</figcaption><pre tabindex="0" aria-label="${esc(label)} 示例"><code class="language-${esc(lang || "text")}">${code}\n</code></pre></figure>\n`;
+    };
+    renderer.heading = function ({ text, depth }) {
+      const id = text
+        .replace(/[^\p{L}\p{N}]+/gu, "-")
+        .replace(/^-|-$/g, "")
+        .toLowerCase();
+      if (!id || headings.some((h) => h.id === id)) throw Error(`Duplicate or empty heading: ${text}`);
+      headings.push({ id, title: text });
+      return `<h${Math.max(2, depth - 1)} id="${esc(id)}">${esc(text)}</h${Math.max(2, depth - 1)}>\n`;
+    };
+    return { body: new Marked({ renderer, gfm: true }).parse(source), headings };
+  }
+  const books = {};
+  for (const [id, spec] of Object.entries(products)) {
+    const files = await readdir(resolve(input, id));
+    const expected = ["overview.md", ...spec.parts.map(([, name]) => name + ".md")].sort();
+    if (files.sort().join() !== expected.join()) throw Error(`Unlisted manuscript in ${id}: ${files}`);
+    const b = (books[id] = { ...spec, id, parts: [], all: [], byKey: new Map(), groups: new Set() });
+    for (const [title, name] of spec.parts) {
+      const groups = parsePart(await read(`${id}/${name}.md`));
+      if (!groups.length) throw Error(`Empty manuscript ${name}`);
+      b.parts.push({ title, groups });
+      for (const g of groups) {
+        if (b.groups.has(g.id)) throw Error(`Duplicate group: ${id}/${g.id}`);
+        b.groups.add(g.id);
+        for (const a of g.articles) {
+          const key = g.id + "/" + a.id;
+          if (b.byKey.has(key) || legacy[id][key]) throw Error(`Duplicate URL: ${id}/${key}`);
+          Object.assign(a, { key, path: `${id}/${key}.html`, group: g.id, groupTitle: g.title, part: title });
+          b.byKey.set(key, a);
+          b.all.push(a);
+        }
       }
     }
+    for (const key of [
+      b.start,
+      ...b.picks,
+      ...Object.values(legacy[id]).flatMap(([key, anchors]) => [key, ...Object.values(anchors ?? {})]),
+    ])
+      if (!b.byKey.has(key)) throw Error(`Unknown manual target ${id}/${key}`);
   }
-  return articles;
-}
-
-export async function buildManuals(quick) {
-  const requireQuick = createRequire(resolve(quick, "package.json"));
-  const { Marked, Renderer } = await import(pathToFileURL(requireQuick.resolve("marked")).href);
-  const articles = await loadArticles(Marked, Renderer);
-  const byProduct = (product, group) => articles.filter((a) => a.product === product && (!group || a.group === group));
-  const picks = (product) => products[product].picks.map((key) => {
-    const found = articles.find((a) => a.product === product && a.key === key);
-    if (!found) throw Error(`Missing featured task: ${product}/${key}`);
-    return found;
-  });
-  const list = (items, link) => `<ul class="links">${items.map((a) => `<li>${link(a.path, a.title)}</li>`).join("")}</ul>`;
-
-  async function page({ path, title, product, group, headings = [] }, content) {
-    const book = products[product];
-    const home = `${product}/index.html`;
-    // Relative hyperlinks also work on static hosts mounted under a project prefix.
-    const href = (target) => escape(posix.relative(posix.dirname(path), target));
-    const link = (target, label, current = false) =>
-      `<a href="${href(target)}"${current ? ' aria-current="page"' : ""}>${escape(label)}</a>`;
-    const nav = Object.entries(products).map(([key, p]) => link(`${key}/index.html`, p.name, path === `${key}/index.html`)).join("");
-    const crumb = [link("index.html", "文档中心")];
-    if (book) crumb.push(link(home, book.name));
-    if (group) crumb.push(link(`${product}/${group}/index.html`, sections[group][0]));
-    const sidebar = book ? `<aside id="book-nav"><nav aria-label="本册目录">
-      <a class="book" href="${href(home)}">${escape(book.name)} 手册</a>
-      ${Object.entries(sections).map(([key, [label]]) => `<details${key === group ? " open" : ""}>
-        <summary>${label}</summary>${link(`${product}/${key}/index.html`, `${label}索引`)}
-        ${byProduct(product, key).map((a) => link(a.path, a.title, a.path === path)).join("")}</details>`).join("")}
-    </nav></aside>` : "";
-    const contents = headings.length > 1 ? `<details class="contents"><summary>本页内容</summary>
-      ${headings.map((h) => `<a href="#${escape(h.id)}">${escape(h.name)}</a>`).join("")}</details>` : "";
-    const back = link(`../index.html${book ? `?product=${product}` : ""}`, book ? `返回 ${book.name} 产品介绍` : "返回产品介绍");
-    const titleText = [title, ...(book && path !== home ? [book.name] : []), "ZPI 文档中心"].join(" · ");
-    const html = `<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escape(titleText)}</title><link rel="stylesheet" href="${href("manual.css")}"></head>
-<body${book ? ` data-product="${product}"` : ""}><a class="skip" href="#content">跳到正文</a>
-<header><div class="mast"><a class="brand" href="${href("index.html")}">ZPI <span>使用手册</span></a><nav aria-label="切换产品手册">${nav}</nav></div></header>
-<div class="layout${book ? "" : " hub"}">${sidebar}<main id="content">
-<nav class="crumb" aria-label="所在位置">${crumb.join(" / ")}</nav>
-<h1>${escape(title)}</h1>${contents}${content(link)}
-<footer>${back}<span>${escape(book?.baseline ?? "桌面 · 浮窗 · 开发者接口")} · ${link("versions.html", "核对范围")}</span></footer>
-</main></div></body></html>\n`;
+  const emitted = new Set();
+  async function page(path, { book: b, title, article: a, headings = [], kind = "article" }, content) {
+    if (emitted.has(path)) throw Error(`Duplicate output ${path}`);
+    emitted.add(path);
+    const href = (target) => esc(posix.relative(posix.dirname(path), target));
+    function link(target, label, attrs = "") {
+      return `<a href="${href(target)}"${attrs ? " " + attrs : ""}>${esc(label)}</a>`;
+    }
+    const bookLink = (x, label) =>
+      link(
+        `${x.id}/index.html`,
+        label,
+        x === b ? 'aria-current="' + (kind === "overview" ? "page" : "true") + '"' : "",
+      );
+    const entry = (item, attrs = "") => link(item.path, item.title, attrs);
+    const mark = (id, size) =>
+      `<img src="${href(`media/${marks[id]}`)}" width="${size}" height="${size}" alt="">`;
+    const home = b && `${b.id}/index.html`;
+    const directoryGroup = (g) =>
+      `<details class="nav-group"${g.id === (a?.group ?? "start") ? " open" : ""}><summary>${esc(g.title)}</summary><div>${g.articles.map((s) => entry(s, s === a ? 'aria-current="page"' : "")).join("")}</div></details>`;
+    const directoryPart = (part, index) => {
+      const groups = part.groups.map(directoryGroup).join("");
+      if (b.parts.length === 1) return groups;
+      const expanded = a ? a.part === part.title : index === 0;
+      return `<details class="part"${expanded ? " open" : ""}><summary>${esc(part.title)}</summary>${groups}</details>`;
+    };
+    const groupNav = b
+      ? `<nav aria-label="${b.name}目录" class="chapters">${link(home, "手册概述", kind === "overview" ? 'aria-current="page"' : "")}${b.parts.map(directoryPart).join("")}</nav>`
+      : "";
+    const directory = b
+      ? `<aside class="book-nav"><div class="book-label">${esc(b.name)} <small>v${esc(b.version)}</small></div>${groupNav}</aside><details class="mobile-nav"><summary>本册目录<span>${esc(b.short)}</span></summary>${groupNav}</details>`
+      : "";
+    const position = a ? b.all.indexOf(a) : -1;
+    const turn = (item, rel, name) =>
+      item
+        ? `<a rel="${rel}" href="${href(item.path)}"><small>${name}</small><span>${esc(item.title)}</span></a>`
+        : "";
+    const pagination = a
+      ? `<nav class="turn" aria-label="章节翻页">${turn(b.all[position - 1], "prev", "上一篇")}${turn(b.all[position + 1], "next", "下一篇")}</nav>`
+      : "";
+    const trail = [
+      link("index.html", "使用手册"),
+      ...(b ? [link(home, b.short)] : []),
+      ...(a ? [esc(a.groupTitle)] : []),
+    ].join('<i aria-hidden="true">/</i>');
+    const toc =
+      headings.length > 1
+        ? `<nav class="toc" aria-label="本页内容"><b>本页内容</b>${headings.map((h) => `<a href="#${esc(h.id)}">${esc(h.title)}</a>`).join("")}</nav>`
+        : "";
+    const result = `<!doctype html><html lang="zh-CN" data-book="${esc(b?.id ?? "library")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc([title, b?.name, "ZPI 使用手册"].filter(Boolean).join(" · "))}</title><link rel="stylesheet" href="${href("manual.css")}"></head><body><a class="skip" href="#content">跳到正文</a>
+<header><div class="mast"><a class="brand" href="${href("index.html")}" aria-label="ZPI 使用手册">${mark("zpi", 32)}<span>使用手册</span></a><nav aria-label="切换产品手册">${Object.values(
+      books,
+    )
+      .map((x) => bookLink(x, x.short))
+      .join("")}</nav></div></header>
+<div class="layout ${b ? "" : "library"}">${directory}<main id="content" class="${kind}"><nav class="crumb" aria-label="所在位置">${trail}</nav><h1>${esc(title)}</h1>${content({ link, entry, href, mark })}${pagination}<footer>${link(`../index.html${b ? "?product=" + b.id : ""}`, b ? `返回 ${b.name} 产品介绍` : "返回产品介绍")}${link("versions.html", "适用版本")}</footer></main>${toc}</div></body></html>\n`;
     const dest = resolve(output, path);
     await mkdir(dirname(dest), { recursive: true });
-    await writeFile(dest, html);
+    await writeFile(dest, result);
   }
-
-  // Vite copies public/ wholesale: a removed article must not survive the next build.
   await rm(output, { recursive: true, force: true });
-  await page({ path: "index.html", title: "使用手册" }, (link) => `
-    <p class="lead">打开的是桌面工作区、悬浮对话窗，还是一段 TypeScript？从你面前的产品开始。</p>
-    ${Object.entries(products).map(([id, p]) => `<section><h2>${link(`${id}/index.html`, p.name)}</h2>
-      <p>${escape(p.description)}</p>${list(picks(id), link)}</section>`).join("")}`);
-  for (const [product, p] of Object.entries(products)) {
-    await page({ path: `${product}/index.html`, product, title: `${p.name} 使用手册` }, (link) => `
-      <p class="lead">${escape(p.description)}</p>
-      <nav class="routes" aria-label="四种阅读入口">${Object.entries(sections).map(([key, [type, intent, desc]]) => `<section>
-        <h2>${link(`${product}/${key}/index.html`, `${type}｜${intent}`)}</h2><p>${desc}</p></section>`).join("")}</nav>
-      <section><h2>常用查找</h2>${list(picks(product), link)}</section>`);
-    for (const [group, [type, intent, desc]] of Object.entries(sections)) {
-      const items = byProduct(product, group);
-      if (!items.length) throw Error(`Empty manual section: ${product}/${group}`);
-      await page({ path: `${product}/${group}/index.html`, product, group, title: `${type}｜${intent}` },
-        (link) => `<p class="lead">${desc}</p>${list(items, link)}`);
+  await page(
+    "index.html",
+    { title: "产品使用手册", kind: "overview" },
+    ({ link, mark }) =>
+      `<p class="lead">从手头要做的事开始。</p><div class="bookshelf">${Object.values(books)
+        .map(
+          (b) =>
+            `<section data-volume="${b.id}">${mark(b.id, 44)}<h2>${link(`${b.id}/index.html`, b.name)}</h2><p>${esc(b.description)}</p>${link(b.byKey.get(b.start).path, b.byKey.get(b.start).title)}</section>`,
+        )
+        .join("")}</div>`,
+  );
+  for (const b of Object.values(books)) {
+    const overview = markdown(await read(b.id + "/overview.md"));
+    await page(
+      `${b.id}/index.html`,
+      { book: b, title: b.name + " 使用手册", kind: "overview" },
+      ({ link, entry }) =>
+        `<article>${overview.body}</article><section class="picks"><h2>按手上的任务查找</h2><ul>${b.picks.map((k) => `<li>${entry(b.byKey.get(k))}</li>`).join("")}</ul></section><nav class="routes" aria-label="按类型浏览">${Object.entries(
+          sections,
+        )
+          .map(([key, label]) => link(`${b.id}/${key}/index.html`, label))
+          .join("")}</nav>`,
+    );
+    for (const a of b.all) {
+      const { body, headings } = markdown(a.body, a.path);
+      await page(
+        a.path,
+        { book: b, article: a, title: a.title, headings },
+        () => `<article>${body}</article>`,
+      );
+    }
+    for (const [type, label] of Object.entries(sections)) {
+      const entries = b.all.filter(
+        (a) =>
+          (Object.entries(b.kinds).find(([, groups]) => groups.includes(a.group))?.[0] ?? "how-to") === type,
+      );
+      await page(
+        `${b.id}/${type}/index.html`,
+        { book: b, title: label, kind: "index" },
+        ({ entry }) => `<ul class="index-list">${entries.map((a) => `<li>${entry(a)}</li>`).join("")}</ul>`,
+      );
+    }
+    for (const [old, [target, anchors = {}]] of Object.entries(legacy[b.id])) {
+      const dest = b.byKey.get(target);
+      await page(
+        `${b.id}/${old}.html`,
+        { book: b, title: dest.title, kind: "moved" },
+        ({ entry }) =>
+          `<p>这篇文章已按具体操作重新编排。</p><p class="continue">${entry(dest)}</p>${Object.entries(
+            anchors,
+          )
+            .map(([id, key]) => `<p id="${esc(id)}">${entry(b.byKey.get(key))}</p>`)
+            .join("")}`,
+      );
     }
   }
-  for (const a of articles) await page(a, () => `<article>${a.html}</article>`);
-  const versions = await readFile(resolve(input, "versions.md"), "utf8");
-  await page({ path: "versions.html", title: "版本与验证边界" }, () => new Marked().parse(versions));
+  const versions = markdown(await read("versions.md"));
+  await page(
+    "versions.html",
+    { title: "适用版本", kind: "index" },
+    () => `<article>${versions.body}</article>`,
+  );
+  highlighter.dispose();
+  await mkdir(resolve(output, "zpi-agent-sdk/examples"), { recursive: true });
+  for (const [name, source] of examples)
+    await writeFile(resolve(output, "zpi-agent-sdk/examples", name), source);
+  await mkdir(resolve(output, "media"), { recursive: true });
+  for (const file of ["desktop-deepseek.webp", "quick-draft.webp", ...Object.values(marks)]) {
+    const source = file.endsWith(".svg") ? resolve(root, "src", file) : resolve(input, "media", file);
+    await copyFile(source, resolve(output, "media", file));
+  }
   await copyFile(resolve(input, "manual.css"), resolve(output, "manual.css"));
-  console.log(`Manuals: ${articles.length} articles, ${Object.keys(products).length} books, ${Object.keys(sections).length} sections each.`);
+  console.log(
+    `Manuals: ${Object.values(books)
+      .map((b) => `${b.short} ${b.all.length}`)
+      .join(", ")} articles; ${emitted.size} static pages.`,
+  );
 }
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
   await buildManuals(resolve(process.env.QUICK_CHAT_SOURCE || resolve(root, "../zpi-quick-chat")));
-}

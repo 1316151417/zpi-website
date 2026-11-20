@@ -9,6 +9,7 @@ import {
   availablePresets,
   defaultPreferences,
   modelReasoningLabel,
+  sidebarLimits,
   toThinking,
 } from "@source/desktop/shared/config.ts";
 import { demoProviders, defaultSelection as selection } from "./demo-models";
@@ -51,8 +52,18 @@ const on = (name: string, callback: (...args: any[]) => void) => {
 };
 const emit = (name: string, value?: any) =>
   callbacks.get(name)?.forEach((callback) => callback(clone(value)));
+const phoneLayout: MediaQueryList | undefined = site()?.phoneLayout;
+if (phoneLayout) document.documentElement.dataset.homePreview = "";
+let sidebarChosen = false;
 const settings: PublicSettings = {
-  interface: { ...clone(defaultPreferences), theme: currentTheme(), showContextUsage: true },
+  interface: {
+    ...clone(defaultPreferences),
+    sidebarCollapsed: phoneLayout?.matches ?? defaultPreferences.sidebarCollapsed,
+    // Seed the showcase, not the splitter: a visitor's width and collapse choices still win.
+    sidebarWidth: site()?.homepageProduct === "zpi" ? sidebarLimits.min : defaultPreferences.sidebarWidth,
+    theme: currentTheme(),
+    showContextUsage: true,
+  },
   shortcuts: defaultShortcuts("darwin"),
   autoArchive: clone(defaultAutoArchiveSettings),
   plugins: clone(defaultPluginSettings),
@@ -200,6 +211,12 @@ function updateSettings() {
   emit("onSettings", settings);
   return settings;
 }
+phoneLayout?.addEventListener("change", ({ matches }) => {
+  if (!sidebarChosen) {
+    settings.interface.sidebarCollapsed = matches;
+    updateSettings();
+  }
+});
 window.addEventListener("zpi-theme-change", () => {
   settings.interface.theme = currentTheme();
   updateSettings();
@@ -498,6 +515,7 @@ function disposeSession(sid: string) {
 const methods: Record<string, (...args: any[]) => any> = {
   getSettings: () => settings,
   updatePreferences: (input) => {
+    if (input.sidebarCollapsed !== undefined) sidebarChosen = true;
     settings.interface = { ...settings.interface, ...input };
     return updateSettings();
   },
