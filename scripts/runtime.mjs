@@ -14,15 +14,17 @@ const { build, createServer } = await import(pathToFileURL(requireZpi.resolve("v
 const tailwind = (await import(pathToFileURL(requireZpi.resolve("@tailwindcss/vite")).href)).default;
 
 // Vite copies public/ wholesale, including stale files from previous builds.
-await rm(resolve(root, "public/backup"), { recursive: true, force: true });
+await Promise.all([
+  rm(resolve(root, "public/backup"), { recursive: true, force: true }),
+  rm(resolve(root, "public/zpi-icon.png"), { force: true }),
+]);
 await mkdir(resolve(root, "public"), { recursive: true });
 await cp(resolve(zpi, "packages/desktop/src/renderer/public"), resolve(root, "public"), { recursive: true });
-const assets = Promise.all([
-  cp(resolve(zpi, "icon.png"), resolve(root, "public/zpi-icon.png")),
-  ...["cmaps", "standard_fonts", "wasm"].map((dir) =>
+const assets = Promise.all(
+  ["cmaps", "standard_fonts", "wasm"].map((dir) =>
     cp(resolve(zpi, "node_modules/pdfjs-dist", dir), resolve(root, "public/pdfjs", dir), { recursive: true }),
   ),
-]);
+);
 async function writeIfChanged(path, content) {
   const previous = await readFile(path, "utf8").catch((error) => {
     if (error.code !== "ENOENT") throw error;

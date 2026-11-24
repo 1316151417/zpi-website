@@ -16,7 +16,7 @@ const esc = (t) =>
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
 const read = (file) => readFile(resolve(input, file), "utf8");
-const marks = { zpi: "zpi-app.webp", "zpi-quick-chat": "quick-chat.svg", "zpi-agent-sdk": "agent-sdk.svg" };
+const marks = { zpi: "zpi.svg", "zpi-quick-chat": "quick-chat.svg", "zpi-agent-sdk": "agent-sdk.svg" };
 const sdk = "zpi-agent-sdk",
   reference = `${sdk}/typescript.html`;
 const slug = (text) =>

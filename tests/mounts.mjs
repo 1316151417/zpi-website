@@ -38,6 +38,11 @@ async function exercise(home, mount) {
     p.setDefaultTimeout(16000);
     await p.goto(home);
     const d = p.frameLocator("#live");
+    const dockIcons = d.locator(".dock button[data-open] img");
+    for (const icon of [p.locator(".brand img"), ...[0, 1, 2].map((i) => dockIcons.nth(i))]) {
+      assert.match(await icon.getAttribute("src"), /^data:image\/svg\+xml,/);
+      await icon.evaluate((img) => img.decode());
+    }
     await d.frameLocator("#zpi-frame").locator("main.main").waitFor();
     await p.locator('.products [data-product="zpi-quick-chat"]').click();
     await d.frameLocator("#quick-frame").locator("#input").fill("路径测试");
@@ -87,7 +92,9 @@ async function exercise(home, mount) {
     assert.deepEqual(bad, [], "unexpected network paths");
     for (const path of [
       "manuals/",
-      "zpi-icon.png",
+      "manuals/media/zpi.svg",
+      "manuals/media/quick-chat.svg",
+      "manuals/media/agent-sdk.svg",
       "source-versions.json",
       "pdfjs/standard_fonts/FoxitFixed.pfb",
     ])
