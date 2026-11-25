@@ -76,14 +76,12 @@ async function staticCheck() {
     assert.equal(r.status, 200, path);
     const nodes = [...walk(parse(await r.text()))];
     assert.equal(nodes.filter((n) => n.tagName === "h1").length, 1, path);
-    assert.ok(
-      !nodes.some(
-        (n) =>
-          n.tagName === "iframe" ||
-          (n.tagName === "script" && (text(n).trim() || !attr(n, "src")?.endsWith("reader.js"))),
-      ),
-      path,
-    );
+    assert.ok(!nodes.some((n) => n.tagName === "iframe"), path);
+    const scripts = nodes.filter((n) => n.tagName === "script");
+    assert.deepEqual(scripts.map((n) => [new URL(attr(n, "src"), base + path).pathname, text(n).trim()]), [
+      ["/reading/theme.js", ""], ["/manuals/reader.js", ""],
+    ], path);
+    assert.equal(nodes.filter((n) => n.tagName === "button" && attr(n, "data-theme-switch") !== undefined).length, 1, path);
     const ids = nodes.map((n) => attr(n, "id")).filter(Boolean);
     assert.equal(ids.length, new Set(ids).size, path);
     docs.set(path, new Set(ids));
@@ -185,6 +183,30 @@ async function navigate(page, mobile) {
     assert.equal(new URL(page.url()).searchParams.get("product"), book);
   }
 }
+async function checkReadingLayout(page) {
+  await page.goto(base + home("zpi-agent-sdk"));
+  const typography = await page.locator("article p").nth(1).evaluate((p) => {
+    const css = getComputedStyle(p);
+    return [css.fontSize, css.fontWeight, css.lineHeight, p.getBoundingClientRect().width];
+  });
+  assert.deepEqual(typography, ["17px", "400", "28.9px", 660]);
+  const color = (el) => getComputedStyle(el).color;
+  assert.equal(await page.locator("article a").first().evaluate(color), "rgb(53, 84, 125)");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(base + route("zpi-agent-sdk/start/first.html"));
+  const outline = page.locator(".page-outline");
+  await outline.locator("summary").press("Enter");
+  const target = await outline.locator("a").first().getAttribute("href");
+  await outline.locator("a").first().click();
+  assert.equal(await page.locator(":target").getAttribute("id"), decodeURIComponent(target.slice(1)));
+  const token = page.locator(".listing code span").first();
+  const light = await token.evaluate(color);
+  await page.emulateMedia({ colorScheme: "dark" });
+  assert.equal(await token.evaluate(color), light, "without JS the reader stays in its default light theme");
+  assert.equal(await page.locator("[data-theme-switch]").isVisible(), false);
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.setViewportSize({ width: 1380, height: 920 });
+}
 async function checkDisclosures(page) {
   await page.goto(base + route("zpi/start/trust.html"));
   assert.equal(await page.locator(".book-nav details").count(), 0);
@@ -221,6 +243,7 @@ try {
       colorScheme: "light",
     }),
     page = await nojs.newPage();
+  await checkReadingLayout(page);
   await checkDisclosures(page);
   await page.setViewportSize({ width: 1380, height: 920 });
   await navigate(page, false);
@@ -257,7 +280,11 @@ try {
   );
   const dark = await browser.newPage({ viewport: { width: 1280, height: 880 }, colorScheme: "dark" });
   await dark.goto(base + home("zpi-agent-sdk"));
+  const toggle = dark.getByRole("button", { name: "深色模式", exact: true });
+  assert.equal(await toggle.getAttribute("aria-pressed"), "false");
+  await toggle.click();
   await dark.locator('.book-nav a[href="typescript.html"]').click();
+  assert.equal(await toggle.getAttribute("aria-pressed"), "true");
   for (const hash of [
     "query",
     "options",
@@ -276,13 +303,16 @@ try {
   assert.equal(await dark.locator(":target").getAttribute("id"), "options-maxturns");
   await dark.goto(base + home("zpi-agent-sdk"));
   await dark.emulateMedia({ colorScheme: "light" });
+  assert.equal(await toggle.getAttribute("aria-pressed"), "true", "system appearance does not override the reader's choice");
+  await toggle.click();
   await dark.screenshot({ path: join(output, "sdk-overview-editorial.png") });
-  await dark.emulateMedia({ colorScheme: "dark" });
+  await toggle.click();
   await dark.goto(base + route("zpi-agent-sdk/output/stream.html"));
   await dark.screenshot({ path: join(output, "sdk-stream-dark.png") });
   for (const [id] of Object.entries(products)) {
     await dark.goto(base + "/?product=" + id);
     await dark.locator(`html[data-product="${id}"]`).waitFor();
+    assert.equal(await toggle.getAttribute("aria-pressed"), "true");
     const l = dark.locator("#manual-link");
     assert.equal(await l.innerText(), "使用手册");
     assert.equal(await l.evaluate((el) => new URL(el.href).pathname), home(id));

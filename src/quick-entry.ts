@@ -1,8 +1,7 @@
 import type { Bridge, Snapshot, ToolCall } from "@source/quick/types.ts";
 import { validateImages, inputLimits } from "@source/quick/input.ts";
 import "@source/quick/style.css";
-import "./site-theme";
-import "./site-theme.css";
+import "./reading/theme.css";
 import { clone, core, id, clipboard, site, onTrustedInput } from "./shared";
 import type { QuickWindow } from "./quick-window";
 import { scenario } from "./quick-scenarios";

@@ -3,18 +3,22 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="了解 ZPI、ZPI Quick Chat 和 ZPI Agent SDK。先在浏览器里试用，再把需要的工具装到本机。">
-  <meta name="theme-color" content="#fafbfc"><title>ZPI — 极简的界面，收敛的功能。</title><link rel="icon" type="image/svg+xml" href="./src/zpi.svg">
+  <meta name="theme-color" content="#ffffff"><title>ZPI — 极简的界面，收敛的功能。</title><link rel="icon" type="image/svg+xml" href="./src/zpi.svg">
+  <script src="/reading/theme.js"></script>
+  <link rel="preload" href="/reading/fonts/source-sans-3-roman.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/reading/reading.css">
 </head>
 <body>
   <a class="skip" href="#main">跳到产品介绍</a>
   <header class="mast wrap">
     <a class="brand" href="./" aria-label="ZPI 主页"><img src="./src/zpi.svg" width="39" height="39" alt=""><strong>ZPI</strong></a>
     <nav class="products" aria-label="产品"><a href="?product=zpi" data-product="zpi">ZPI</a><a href="?product=zpi-quick-chat" data-product="zpi-quick-chat">ZPI Quick Chat</a><a href="?product=zpi-agent-sdk" data-product="zpi-agent-sdk">ZPI Agent SDK</a></nav>
-    <div class="mast-actions"><a class="repo" id="manual-link" href="./manuals/zpi/index.html">使用手册</a><a class="repo" id="source-link" href="https://github.com/1316151417/zpi">GitHub <span aria-hidden="true">↗</span></a><button type="button" data-theme-switch aria-label="深色模式" aria-pressed="false"></button></div>
+    <div class="mast-actions"><a class="repo" id="manual-link" href="./manuals/zpi/index.html">使用手册</a><a class="repo" id="source-link" href="https://github.com/1316151417/zpi">GitHub <span aria-hidden="true">↗</span></a><button type="button" data-theme-switch hidden></button></div>
   </header>
-  <main id="main" class="wrap">
+  <main id="main" class="wrap" tabindex="-1">
     <section class="workbench" aria-labelledby="headline">
       <div class="cover">
+        <p class="eyebrow">产品介绍 <span aria-hidden="true">/</span> <span id="product-name" lang="en">ZPI</span></p>
         <h1 id="headline">极简的界面，<br>收敛的功能。</h1>
         <p id="intro">回车就发，不必先选模式。从读、写、编辑、执行四个基础工具开始，其余按需开启。</p>
         <section class="install" id="install" aria-labelledby="install-title"><h2 id="install-title">在本机运行</h2>
@@ -41,7 +45,7 @@
     <article><h3>不用先把材料搬到聊天框。</h3><dl class="keys"><div><dt><kbd>⌥ Space</kbd></dt><dd>显示或隐藏浮窗，回到刚才的应用</dd></div><div><dt><kbd>⌥ ⇧ C</kbd></dt><dd>把当前应用的选中文字带入草稿</dd></div><div><dt><kbd>⌥ ⇧ V</kbd></dt><dd>带入剪贴板里的文字或图片</dd></div><div><dt><kbd>⌥ ⇧ A</kbd></dt><dd>框选屏幕，把截图带入草稿</dd></div></dl><p>⌥ 是 Option，⇧ 是 Shift。以上为 macOS 客户端快捷键；跨应用选区和截图需要相应的系统权限。</p></article>
     <article><h3>翻译一句话，或收拾一下下载目录。</h3><p>翻译时不用开工具。要查资料时打开联网；要整理文件、运行程序时，再打开本机工具。可拖动浮窗，也可以把回复固定在另一份文档旁。隐藏保留本次草稿，新建或退出就清空，不写进 ZPI 的任务历史。</p></article>
   </template>
-  <template id="notes-zpi-agent-sdk"><article><h3>一条查询，读出最后的回复。</h3><pre class="example"><code>import { query } from '@zpi-dev/agent-sdk';
+  <template id="notes-zpi-agent-sdk"><article><h3>一条查询，读出最后的回复。</h3><figure class="example"><figcaption>TypeScript · 流式查询</figcaption><pre tabindex="0" aria-label="TypeScript 示例"><code>import { query } from '@zpi-dev/agent-sdk';
 
 for await (const event of query({
   prompt: '只回复：你好，我是 zpi agent sdk。',
@@ -50,7 +54,7 @@ for await (const event of query({
   if (event.type === 'result' &amp;&amp; event.subtype === 'success') {
     console.log(event.result);
   }
-}</code></pre></article></template>
+}</code></pre></figure></article></template>
   <noscript>请启用 JavaScript 切换产品与运行演示。ZPI 桌面版可在 Node.js 24 环境中用 npx @zpi-dev/desktop 启动。</noscript>
   <script type="module" src="./src/home.ts"></script>
 </body></html>

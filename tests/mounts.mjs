@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkTheme } from "./theme.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { chromium } = createRequire(
   resolve(process.env.ZPI_SOURCE || resolve(root, "../zpi"), "package.json"),
@@ -20,7 +21,7 @@ async function exercise(home, mount) {
     assert.equal(r.headers.get("location"), "/zpi/?product=zpi-agent-sdk");
     assert.equal((await fetch(origin + "/index.html")).status, 404);
   }
-  const c = await browser.newContext({ reducedMotion: "reduce" }),
+  const c = await browser.newContext({ reducedMotion: "reduce", colorScheme: "dark" }),
     bad = [];
   try {
     await c.route(/^https?:/, (r) => {
@@ -36,7 +37,13 @@ async function exercise(home, mount) {
     });
     const p = await c.newPage();
     p.setDefaultTimeout(16000);
-    await p.goto(home);
+    await checkTheme(p, home);
+    const type = await p.locator("#notes p").first().evaluate(async (el) => {
+      const faces = await document.fonts.load('400 17px "Source Sans 3"', "ZPI");
+      const css = getComputedStyle(el);
+      return [faces.length > 0, css.fontSize, css.fontWeight, css.lineHeight];
+    });
+    assert.deepEqual(type, [true, "17px", "400", "28.9px"]);
     const d = p.frameLocator("#live");
     const dockIcons = d.locator(".dock button[data-open] img");
     for (const icon of [p.locator(".brand img"), ...[0, 1, 2].map((i) => dockIcons.nth(i))]) {
@@ -92,6 +99,12 @@ async function exercise(home, mount) {
     assert.deepEqual(bad, [], "unexpected network paths");
     for (const path of [
       "manuals/",
+      "reading/reading.css",
+      "reading/theme.css",
+      "reading/theme.js",
+      "reading/fonts/source-sans-3-roman.woff2",
+      "reading/fonts/source-sans-3-italic.woff2",
+      "reading/fonts/SourceSans3-OFL.txt",
       "manuals/media/zpi.svg",
       "manuals/media/quick-chat.svg",
       "manuals/media/agent-sdk.svg",
@@ -101,7 +114,7 @@ async function exercise(home, mount) {
       assert.equal((await fetch(at(path), { method: "HEAD" })).status, 200, path);
     assert.equal((await fetch(at("assets/not-a-chunk.js"))).status, 404);
     console.log(
-      `Verified ${mount || "/"}: homepage, history, 3 embeds, Snake, direct manuals, media and asset 404.`,
+      `Verified ${mount || "/"}: shared theme and cross-tab sync, homepage, history, 3 embeds, Snake, direct manuals, media and asset 404.`,
     );
   } finally {
     await c.close();

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, posix, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -33,8 +33,9 @@ export async function buildManuals(quick, zpi = resolve(process.env.ZPI_SOURCE |
   const { createHighlighter } = await import(
     pathToFileURL(createRequire(resolve(zpi, "package.json")).resolve("shiki")).href
   );
+  const codeThemes = { light: "github-light", dark: "github-dark" };
   const highlighter = await createHighlighter({
-    themes: ["github-dark"],
+    themes: Object.values(codeThemes),
     langs: ["typescript", "bash", "markdown"],
   });
   const { Marked, Renderer } = await import(
@@ -67,13 +68,18 @@ export async function buildManuals(quick, zpi = resolve(process.env.ZPI_SOURCE |
       }[lang] ?? [undefined, lang || "文本"];
       const code = grammar
         ? highlighter
-            .codeToTokensBase(text, { lang: grammar, theme: "github-dark" })
-            .map((line) =>
-              line.map((t) => `<span style="color:${esc(t.color)}">${esc(t.content)}</span>`).join(""),
-            )
+            .codeToTokensWithThemes(text, { lang: grammar, themes: codeThemes })
+            .map((line) => line.map(({ variants, content }) =>
+              `<span style="--token-light:${esc(variants.light.color)};--token-dark:${esc(variants.dark.color)}">${esc(content)}</span>`,
+            ).join(""))
             .join("\n")
         : esc(text);
       return `<figure class="listing"><figcaption>${esc(label)}${download}</figcaption><pre tabindex="0" aria-label="${esc(label)} 示例"><code class="language-${esc(lang || "text")}">${code}\n</code></pre></figure>\n`;
+    };
+    const renderTable = renderer.table;
+    renderer.table = function (token) {
+      const label = token.header.map((cell) => cell.text).join("、");
+      return `<div class="table-scroll" tabindex="0" role="region" aria-label="表格：${esc(label)}">${renderTable.call(this, token)}</div>\n`;
     };
     renderer.heading = function ({ text, depth }) {
       const id = slug(text);
@@ -181,18 +187,17 @@ export async function buildManuals(quick, zpi = resolve(process.env.ZPI_SOURCE |
       pos >= 0
         ? `<nav class="turn" aria-label="章节翻页">${turn(pos ? b.all[pos - 1] : b.byKey.get("index"), "prev", "上一篇")}${turn(b.all[pos + 1], "next", "下一篇")}</nav>`
         : "";
-    const toc =
-      headings.length > 1
-        ? `<nav class="toc" aria-label="本页内容"><b>${listIcon} 在此页面</b>${headings.map((h) => `<a href="#${esc(h.id)}">${esc(h.title)}</a>`).join("")}</nav>`
-        : "";
-    const result = `<!doctype html><html lang="zh-CN" data-book="${esc(b?.id ?? "library")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc([title, b?.name, "ZPI Docs"].filter(Boolean).join(" · "))}</title><link rel="stylesheet" href="${href("manual.css")}"><script defer src="${href("reader.js")}"></script></head><body><a class="skip" href="#content">跳到正文</a>
-<header class="doc-head"><div class="mast"><div class="identity"><a class="brand" href="${href("index.html")}" aria-label="ZPI 使用手册">${mark("zpi", 32)} ZPI Docs</a><span class="language">简体中文</span></div><a class="search-link" aria-label="搜索文档" href="${href("find.html")}${b ? "?book=" + b.id : ""}">${magnifier}<span>搜索文档…</span><kbd>⌘ K</kbd></a><div class="external"><a class="source" href="https://github.com/1316151417/${b?.id === "zpi-quick-chat" ? "zpi-quick-chat" : "zpi"}">GitHub</a>${link(homeTarget, "产品主页", 'class="home-link"')}</div></div>
+    const outline = headings.length > 1 ? headings.map((h) => `<a href="#${esc(h.id)}">${esc(h.title)}</a>`).join("") : "";
+    const toc = outline && `<nav class="toc" aria-label="本页内容"><b>${listIcon} 在此页面</b>${outline}</nav>`;
+    const compactToc = outline && `<details class="page-outline"><summary>本页内容</summary><nav aria-label="本页内容">${outline}</nav></details>`;
+    const result = `<!doctype html><html lang="zh-CN" data-book="${esc(b?.id ?? "library")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc([title, b?.name, "ZPI Docs"].filter(Boolean).join(" · "))}</title><meta name="theme-color" content="#ffffff"><script src="${href("../reading/theme.js")}"></script><link rel="preload" href="${href("../reading/fonts/source-sans-3-roman.woff2")}" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="${href("../reading/reading.css")}"><link rel="stylesheet" href="${href("manual.css")}"><script defer src="${href("reader.js")}"></script></head><body><a class="skip" href="#content">跳到正文</a>
+<header class="doc-head"><div class="mast"><div class="identity"><a class="brand" href="${href("index.html")}" aria-label="ZPI 使用手册">${mark("zpi", 32)} ZPI Docs</a><span class="language">简体中文</span></div><a class="search-link" aria-label="搜索文档" href="${href("find.html")}${b ? "?book=" + b.id : ""}">${magnifier}<span>搜索文档…</span><kbd>⌘ K</kbd></a><div class="external"><a class="source" href="https://github.com/1316151417/${b?.id === "zpi-quick-chat" ? "zpi-quick-chat" : "zpi"}">GitHub</a>${link(homeTarget, "产品主页", 'class="home-link"')}<button type="button" data-theme-switch hidden></button></div></div>
 <nav class="products" aria-label="切换产品手册">${link("index.html", "使用手册", path === "index.html" ? 'aria-current="page"' : "")}${Object.values(
       books,
     )
       .map((x) => link(x.home, x.short, x === b ? 'aria-current="true"' : ""))
       .join("")}</nav></header>
-<div class="layout ${b ? "" : "library"}">${rail}<main id="content" class="${kind}"><div class="eyebrow">${esc(eyebrow ?? a?.sectionTitle ?? b?.short ?? "ZPI 使用手册")}</div><div class="title-line"><h1>${esc(title)}</h1>${tools}</div>${content({ link, entry, mark, href })}${pagination}<footer>${link(homeTarget, b ? `返回 ${b.name} 产品介绍` : "返回产品介绍")}${link("versions.html", b ? "适用版本 · " + b.version : "适用版本")}</footer></main>${toc}</div></body></html>\n`;
+<div class="layout ${b ? "" : "library"}">${rail}<main id="content" tabindex="-1" class="${kind}"><div class="eyebrow">${esc(eyebrow ?? a?.sectionTitle ?? b?.short ?? "ZPI 使用手册")}</div><div class="title-line"><h1>${esc(title)}</h1>${tools}</div>${compactToc}${content({ link, entry, mark, href })}${pagination}<footer>${link(homeTarget, b ? `返回 ${b.name} 产品介绍` : "返回产品介绍")}${link("versions.html", b ? "适用版本 · " + b.version : "适用版本")}</footer></main>${toc}</div></body></html>\n`;
     const dest = resolve(output, path);
     await mkdir(dirname(dest), { recursive: true });
     await writeFile(dest, result);
@@ -287,6 +292,7 @@ export async function buildManuals(quick, zpi = resolve(process.env.ZPI_SOURCE |
       file.endsWith(".svg") ? resolve(root, "src", file) : resolve(input, "media", file),
       resolve(output, "media", file),
     );
+  await cp(resolve(root, "src/reading"), resolve(root, "public/reading"), { recursive: true });
   for (const name of ["manual.css", "reader.js"]) await copyFile(resolve(input, name), resolve(output, name));
   console.log(
     `Manuals: ${Object.values(books)

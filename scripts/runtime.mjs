@@ -67,7 +67,7 @@ const sourceHashes = Object.fromEntries(
 const quickHtml = Object.fromEntries(sources)
   ["quick/index.html"].toString("utf8")
   .replace(/<meta http-equiv="Content-Security-Policy"[^>]+>/, "")
-  .replace("<title>Quick Chat</title>", "<title>ZPI Quick Chat</title>")
+  .replace("<title>Quick Chat</title>", '<title>ZPI Quick Chat</title><script src="/reading/theme.js"></script>')
   .replace(/(<textarea\b[^>]*?) autofocus\b/, "$1")
   .replace('<link rel="stylesheet" href="./style.css">', "")
   .replace('src="./renderer.js"', 'src="/src/quick-entry.ts"');

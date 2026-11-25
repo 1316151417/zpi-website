@@ -73,6 +73,7 @@ if (
       if (link.dataset.product === product) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     }
+    el("product-name").textContent = page.name;
     el("headline").replaceChildren(page.title[0], document.createElement("br"), page.title[1]);
     el("intro").textContent = page.intro;
     el("guide-title").textContent = page.guide;

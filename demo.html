@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="在独立的临时桌面上体验 ZPI、ZPI Quick Chat 和 ZPI Agent SDK。"><title>ZPI — 交互式桌面</title><link rel="icon" type="image/svg+xml" href="./src/zpi.svg"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="在独立的临时桌面上体验 ZPI、ZPI Quick Chat 和 ZPI Agent SDK。"><title>ZPI — 交互式桌面</title><script src="/reading/theme.js"></script><link rel="icon" type="image/svg+xml" href="./src/zpi.svg"></head>
 <body>
-  <header class="system-menu"><span class="apple" aria-hidden="true"></span><strong id="active-app" class="app-name">访达</strong><span class="menu-decoy">File</span><span class="menu-decoy">Edit</span><span class="menu-decoy">View</span><span class="menu-decoy">Window</span><span class="menu-space"></span><time id="clock"></time><button type="button" data-theme-switch aria-label="深色模式" aria-pressed="false"></button></header>
+  <header class="system-menu"><span class="apple" aria-hidden="true"></span><strong id="active-app" class="app-name">访达</strong><span class="menu-decoy">File</span><span class="menu-decoy">Edit</span><span class="menu-decoy">View</span><span class="menu-decoy">Window</span><span class="menu-space"></span><time id="clock"></time><button type="button" data-theme-switch hidden></button></header>
   <main id="desktop" class="desktop">
     <div class="desktop-files" id="desktop-files" aria-label="桌面文件"></div>
     <section class="zpi-native-window" id="zpi-native-window" data-app="ZPI" aria-label="ZPI 桌面窗口" hidden><iframe id="zpi-frame" data-theme-frame title="ZPI 原始界面"></iframe><div id="zpi-resize" aria-hidden="true"></div></section>

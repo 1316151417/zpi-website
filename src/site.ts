@@ -3,7 +3,6 @@ import { core, files, DESKTOP, type FileChange } from "./shared";
 import { QuickWindow } from "./quick-window";
 import { zpiGeometry } from "./zpi-window";
 import { desktopApps } from "./mac-apps";
-import "./site-theme";
 import { requestedApp, sequence, waitUntil, delay, type DemoApp } from "./playback";
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
